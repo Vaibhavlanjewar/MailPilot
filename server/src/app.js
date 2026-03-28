@@ -15,7 +15,7 @@ import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
 const app = express();
 
-// ✅ FIX: trust proxy (IMPORTANT for Render / rate-limit)
+// ✅ FIX: trust proxy (IMPORTANT for Render)
 app.set("trust proxy", 1);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -57,11 +57,11 @@ function isAllowedVercelOrigin(origin) {
   }
 }
 
-// ✅ CORS validator (FIXED)
+// ✅ CORS validator (SAFE VERSION)
 function corsOriginValidator(origin, callback) {
   console.log("Incoming Origin:", origin);
+  console.log("Allowed Origins:", corsAllowedOrigins);
 
-  // Allow tools like Postman / curl
   if (!origin) return callback(null, true);
 
   const normalized = normalizeOrigin(origin);
@@ -76,11 +76,11 @@ function corsOriginValidator(origin, callback) {
 
   console.warn("❌ Blocked by CORS:", normalized);
 
-  // ✅ DO NOT THROW ERROR (IMPORTANT FIX)
+  // ❗ IMPORTANT: don't throw error
   return callback(null, false);
 }
 
-// ⚠️ Warning if misconfigured
+// ⚠️ Warning
 if (
   env.nodeEnv === "production" &&
   corsAllowedOrigins.every((o) => /localhost|127\.0\.0\.1/i.test(o))
@@ -90,19 +90,20 @@ if (
   );
 }
 
-// ✅ APPLY CORS
-app.use(
-  cors({
-    origin: corsOriginValidator,
-    credentials: true,
-    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    optionsSuccessStatus: 204,
-  }),
-);
+// ✅ SINGLE SOURCE OF TRUTH
+const corsOptions = {
+  origin: corsOriginValidator,
+  credentials: true,
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
+};
 
-// ✅ FIX: handle preflight explicitly
-app.options("*", cors());
+// ✅ APPLY CORS
+app.use(cors(corsOptions));
+
+// ✅ FIX: preflight must use SAME options
+app.options("*", cors(corsOptions));
 
 // ✅ Security
 app.use(
@@ -125,7 +126,7 @@ if (!serveClient) {
   });
 }
 
-// ✅ Health check
+// ✅ Health
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
@@ -141,7 +142,7 @@ app.use("/api/campaign", campaignRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/templates", templateRoutes);
 
-// ✅ Serve frontend (optional)
+// ✅ Serve frontend
 if (serveClient) {
   app.use(express.static(clientDist));
 
