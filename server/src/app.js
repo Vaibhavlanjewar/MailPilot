@@ -105,6 +105,11 @@ app.use(cors(corsOptions));
 // ✅ FIX: preflight must use SAME options
 app.options("*", cors(corsOptions));
 
+app.use("/api", (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 // ✅ Security
 app.use(
   helmet({
