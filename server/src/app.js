@@ -23,6 +23,10 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(createApiRateLimiter());
 
+app.get('/', (_req, res) => {
+  res.json({ message: 'MailPilot API running successfully' });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
