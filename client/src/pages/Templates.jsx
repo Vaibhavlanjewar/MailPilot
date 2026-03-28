@@ -4,6 +4,7 @@ import Card, { CardHeader } from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import Button from '../components/ui/Button';
 import Input, { Label, TextArea } from '../components/ui/Input';
+import HtmlPreview, { HtmlViewModeToggle } from '../components/HtmlPreview';
 import { PageLoader } from '../components/ui/LoadingSpinner';
 import { api } from '../services/api';
 import { formatDate } from '../utils/format';
@@ -12,6 +13,8 @@ export default function Templates() {
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [bodyView, setBodyView] = useState('edit');
+  const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
@@ -35,20 +38,42 @@ export default function Templates() {
     load();
   }, [load]);
 
-  async function handleCreate(e) {
+  function resetForm() {
+    setName('');
+    setSubject('');
+    setBody('');
+    setEditingId(null);
+    setBodyView('edit');
+  }
+
+  function startEdit(row) {
+    setEditingId(row._id);
+    setName(row.name);
+    setSubject(row.subject);
+    setBody(row.body || '');
+    setBodyView('edit');
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
     if (!name.trim() || !subject.trim()) return;
     setSaving(true);
     setError(null);
     try {
-      await api.post('/templates', {
-        name: name.trim(),
-        subject: subject.trim(),
-        body: body.trim(),
-      });
-      setName('');
-      setSubject('');
-      setBody('');
+      if (editingId) {
+        await api.patch(`/templates/${editingId}`, {
+          name: name.trim(),
+          subject: subject.trim(),
+          body: body.trim(),
+        });
+      } else {
+        await api.post('/templates', {
+          name: name.trim(),
+          subject: subject.trim(),
+          body: body.trim(),
+        });
+      }
+      resetForm();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save template');
@@ -63,6 +88,7 @@ export default function Templates() {
     setError(null);
     try {
       await api.delete(`/templates/${id}`);
+      if (String(editingId) === String(id)) resetForm();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete');
@@ -82,17 +108,28 @@ export default function Templates() {
     {
       key: 'actions',
       header: '',
-      className: 'w-24 text-right',
+      className: 'w-44 text-right',
       render: (row) => (
-        <Button
-          type="button"
-          variant="danger"
-          size="sm"
-          disabled={deletingId === row._id}
-          onClick={() => handleDelete(row._id)}
-        >
-          {deletingId === row._id ? '…' : 'Delete'}
-        </Button>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={Boolean(deletingId)}
+            onClick={() => startEdit(row)}
+          >
+            Edit
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            disabled={deletingId === row._id}
+            onClick={() => handleDelete(row._id)}
+          >
+            {deletingId === row._id ? '…' : 'Delete'}
+          </Button>
+        </div>
       ),
     },
   ];
@@ -126,10 +163,14 @@ export default function Templates() {
       <div className="lg:col-span-2">
         <Card>
           <CardHeader
-            title="New template"
-            description="Subject and body are used when you choose this template while creating a campaign."
+            title={editingId ? 'Edit template' : 'New template'}
+            description={
+              editingId
+                ? 'Update name, subject, or HTML body. Preview shows how recipients will see it.'
+                : 'Subject and body are used when you choose this template while creating a campaign.'
+            }
           />
-          <form onSubmit={handleCreate} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Label htmlFor="tpl-name">Name</Label>
               <Input
@@ -151,18 +192,47 @@ export default function Templates() {
               />
             </div>
             <div>
-              <Label htmlFor="tpl-body">Body (HTML)</Label>
-              <TextArea
-                id="tpl-body"
-                rows={8}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="<p>Hi there,</p><p>…</p>"
-              />
+              <div className="mb-1.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Label htmlFor="tpl-body" className="mb-0">
+                  Body (HTML)
+                </Label>
+                <HtmlViewModeToggle value={bodyView} onChange={setBodyView} />
+              </div>
+              {bodyView === 'edit' ? (
+                <TextArea
+                  id="tpl-body"
+                  rows={10}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="<p>Hi there,</p><p>…</p>"
+                />
+              ) : (
+                <HtmlPreview
+                  html={body}
+                  minHeight="280px"
+                  emptyMessage="Switch to Edit HTML and add markup to see a preview."
+                />
+              )}
             </div>
-            <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
-              {saving ? 'Saving…' : 'Create template'}
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" disabled={saving}>
+                {saving
+                  ? 'Saving…'
+                  : editingId
+                    ? 'Save changes'
+                    : 'Create template'}
+              </Button>
+              {editingId ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={resetForm}
+                  disabled={saving}
+                >
+                  Cancel edit
+                </Button>
+              ) : null}
+            </div>
           </form>
         </Card>
       </div>

@@ -23,20 +23,20 @@ export default function DataTable({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-xl border border-surface-border bg-white shadow-card',
+        'overflow-hidden rounded-xl border border-surface-border bg-white shadow-card dark:border-slate-700 dark:bg-slate-900',
         className
       )}
     >
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-surface-border text-left text-sm">
-          <thead className="bg-surface-muted/80">
+        <table className="min-w-full divide-y divide-surface-border text-left text-sm dark:divide-slate-700">
+          <thead className="bg-surface-muted/80 dark:bg-slate-800/80">
             <tr>
               {columns.map((col) => (
                 <th
                   key={col.key}
                   scope="col"
                   className={cn(
-                    'px-4 py-3 font-semibold text-slate-600 sm:px-5',
+                    'px-4 py-3 font-semibold text-slate-600 dark:text-slate-300 sm:px-5',
                     col.className
                   )}
                 >
@@ -45,13 +45,13 @@ export default function DataTable({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-surface-border bg-white">
+          <tbody className="divide-y divide-surface-border bg-white dark:divide-slate-700 dark:bg-slate-900">
             {loading &&
               Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">
                   {columns.map((col) => (
                     <td key={col.key} className="px-4 py-3 sm:px-5">
-                      <div className="h-4 rounded bg-slate-200" />
+                      <div className="h-4 rounded bg-slate-200 dark:bg-slate-700" />
                     </td>
                   ))}
                 </tr>
@@ -60,7 +60,7 @@ export default function DataTable({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-4 py-10 text-center text-slate-500 sm:px-5"
+                  className="px-4 py-10 text-center text-slate-500 dark:text-slate-400 sm:px-5"
                 >
                   {emptyMessage}
                 </td>
@@ -70,13 +70,13 @@ export default function DataTable({
               rows.map((row, idx) => (
                 <tr
                   key={row.id ?? idx}
-                  className="hover:bg-slate-50/80 transition-colors"
+                  className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/50"
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
                       className={cn(
-                        'px-4 py-3 text-slate-800 sm:px-5',
+                        'px-4 py-3 text-slate-800 dark:text-slate-200 sm:px-5',
                         col.className
                       )}
                     >

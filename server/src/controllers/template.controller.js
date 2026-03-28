@@ -35,6 +35,33 @@ export async function createTemplate(req, res, next) {
   }
 }
 
+export async function updateTemplate(req, res, next) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      throw new AppError('Invalid template id', 400);
+    }
+
+    const { name, subject, body = '', textContent = '' } = req.body;
+
+    const template = await Template.findOneAndUpdate(
+      { _id: id, userId: req.userId },
+      { name, subject, body, textContent },
+      { new: true, runValidators: true }
+    );
+
+    if (!template) {
+      throw new AppError('Template not found', 404);
+    }
+
+    logger.info('Template updated', { templateId: template._id });
+
+    res.json({ template });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function deleteTemplate(req, res, next) {
   try {
     const { id } = req.params;

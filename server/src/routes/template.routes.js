@@ -19,6 +19,18 @@ router.post(
   templateController.createTemplate
 );
 
+router.patch(
+  '/:id',
+  authenticate,
+  param('id').isMongoId().withMessage('invalid template id'),
+  body('name').trim().notEmpty().withMessage('name is required'),
+  body('subject').trim().notEmpty().withMessage('subject is required'),
+  body('body').isString().withMessage('body is required'),
+  body('textContent').optional().isString(),
+  validateRequest,
+  templateController.updateTemplate
+);
+
 router.delete(
   '/:id',
   authenticate,

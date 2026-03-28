@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Card, { CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input, { Label, TextArea, Select } from '../components/ui/Input';
+import HtmlPreview, { HtmlViewModeToggle } from '../components/HtmlPreview';
 import { cn } from '../utils/cn';
 import { api } from '../services/api';
 import {
@@ -38,6 +39,7 @@ export default function CreateCampaign() {
   const [error, setError] = useState('');
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [bodyView, setBodyView] = useState('edit');
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +72,7 @@ export default function CreateCampaign() {
       subject: tpl.subject,
       body: tpl.body || '',
     }));
+    setBodyView('edit');
   }
 
   function update(field, value) {
@@ -112,10 +115,19 @@ export default function CreateCampaign() {
     setStep((s) => Math.max(1, s - 1));
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  /**
+   * Only call this from the explicit "Submit campaign" button. Form-level submit
+   * (e.g. Enter inside a <select>) must not queue sends — that's a common browser
+   * footgun in multi-step wizards.
+   */
+  async function finalizeCampaign() {
+    if (step !== 4) return;
+
     setError('');
-    if (form.sendMode === 'schedule' && !form.scheduleAt.trim()) return;
+    if (form.sendMode === 'schedule' && !form.scheduleAt.trim()) {
+      setError('Pick a date and time for scheduled send.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -160,6 +172,11 @@ export default function CreateCampaign() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleFormSubmit(e) {
+    e.preventDefault();
+    // Never finalize from implicit submit (Enter in inputs, select quirks, etc.).
   }
 
   const canNext =
@@ -214,7 +231,14 @@ export default function CreateCampaign() {
         ))}
       </ol>
 
-      <form onSubmit={handleSubmit}>
+      <form
+        onSubmit={handleFormSubmit}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return;
+          if (e.target instanceof HTMLTextAreaElement) return;
+          if (step < 4) e.preventDefault();
+        }}
+      >
         <Card>
           <CardHeader
             title={`Step ${step} — ${steps[step - 1].title}`}
@@ -302,6 +326,9 @@ export default function CreateCampaign() {
                   id="template"
                   value={form.selectedTemplateId}
                   onChange={(e) => applyTemplate(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.preventDefault();
+                  }}
                   disabled={templatesLoading}
                 >
                   <option value="">Write from scratch</option>
@@ -336,15 +363,36 @@ export default function CreateCampaign() {
                 )}
               </div>
               <div>
-                <Label htmlFor="body">Email content</Label>
-                <TextArea
-                  id="body"
-                  rows={12}
-                  value={form.body}
-                  onChange={(e) => update('body', e.target.value)}
-                  placeholder={'<p>Hi {{first_name}},</p><p>Thanks for subscribing…</p>'}
-                  required
-                />
+                <div className="mb-1.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <Label htmlFor="body" className="mb-0">
+                    Email content (HTML)
+                  </Label>
+                  <HtmlViewModeToggle value={bodyView} onChange={setBodyView} />
+                </div>
+                {bodyView === 'edit' ? (
+                  <TextArea
+                    id="body"
+                    rows={12}
+                    value={form.body}
+                    onChange={(e) => update('body', e.target.value)}
+                    placeholder={
+                      '<p>Hi {{first_name}},</p><p>Thanks for subscribing…</p>'
+                    }
+                    required
+                  />
+                ) : (
+                  <HtmlPreview
+                    html={form.body}
+                    minHeight="320px"
+                    emptyMessage="No HTML yet — switch to Edit HTML or pick a template."
+                  />
+                )}
+                {bodyView === 'preview' && (
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    This is a sandboxed preview (recipient mail clients may style
+                    slightly differently).
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -357,6 +405,9 @@ export default function CreateCampaign() {
                   id="sendMode"
                   value={form.sendMode}
                   onChange={(e) => update('sendMode', e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.preventDefault();
+                  }}
                 >
                   <option value="now">Send now</option>
                   <option value="schedule">Schedule</option>
@@ -390,7 +441,11 @@ export default function CreateCampaign() {
                   Continue
                 </Button>
               ) : (
-                <Button type="submit" disabled={submitting}>
+                <Button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => void finalizeCampaign()}
+                >
                   {submitting ? 'Submitting…' : 'Submit campaign'}
                 </Button>
               )}

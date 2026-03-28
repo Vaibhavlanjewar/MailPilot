@@ -19,7 +19,7 @@ export default function DashboardLayout() {
   const title = titles[pathname] || 'MailPilot';
 
   return (
-    <div className="flex min-h-screen bg-surface-muted">
+    <div className="flex min-h-screen bg-surface-muted dark:bg-slate-950">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col lg:ml-0">
         <Navbar onMenuClick={() => setSidebarOpen(true)} title={title} />

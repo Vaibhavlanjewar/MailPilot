@@ -15,7 +15,7 @@ export default function Sidebar({ open, onClose }) {
     <>
       <div
         className={cn(
-          'fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden transition-opacity',
+          'fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity dark:bg-black/60 lg:hidden',
           open ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
         aria-hidden="true"
@@ -23,7 +23,7 @@ export default function Sidebar({ open, onClose }) {
       />
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-surface-border bg-white shadow-elevated transition-transform lg:static lg:translate-x-0 lg:shadow-none',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-surface-border bg-white shadow-elevated transition-transform dark:border-slate-800 dark:bg-slate-900 lg:static lg:translate-x-0 lg:shadow-none',
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -47,8 +47,8 @@ export default function Sidebar({ open, onClose }) {
                 cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                   isActive
-                    ? 'bg-brand-50 text-brand-800'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    ? 'bg-brand-50 text-brand-800 dark:bg-brand-950/50 dark:text-brand-200'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
                 )
               }
             >
@@ -57,10 +57,12 @@ export default function Sidebar({ open, onClose }) {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-surface-border p-4">
-          <div className="rounded-lg bg-surface-muted px-3 py-2.5">
-            <p className="text-xs font-medium text-slate-700">Pro trial</p>
-            <p className="mt-0.5 text-xs text-slate-500">12 days left on your plan</p>
+        <div className="border-t border-surface-border p-4 dark:border-slate-800">
+          <div className="rounded-lg bg-surface-muted px-3 py-2.5 dark:bg-slate-800/80">
+            <p className="text-xs font-medium text-slate-700 dark:text-slate-200">Pro trial</p>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              12 days left on your plan
+            </p>
           </div>
         </div>
       </aside>
