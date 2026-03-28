@@ -15,7 +15,7 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin: "*",
     credentials: true,
     methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
