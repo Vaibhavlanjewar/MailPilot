@@ -1,34 +1,34 @@
-import { useCallback, useEffect, useState } from 'react';
-import Card, { CardHeader } from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import Input, { Label } from '../components/ui/Input';
-import { api } from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { useCallback, useEffect, useState } from "react";
+import Card, { CardHeader } from "../components/ui/Card";
+import Button from "../components/ui/Button";
+import Input, { Label } from "../components/ui/Input";
+import { api } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 export default function Settings() {
   const { user, ready } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasSmtpAppPassword, setHasSmtpAppPassword] = useState(false);
-  const [smtpUser, setSmtpUser] = useState('');
-  const [smtpFromDisplayName, setSmtpFromDisplayName] = useState('');
-  const [smtpAppPassword, setSmtpAppPassword] = useState('');
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpFromDisplayName, setSmtpFromDisplayName] = useState("");
+  const [smtpAppPassword, setSmtpAppPassword] = useState("");
   const [banner, setBanner] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setBanner(null);
     try {
-      const { data } = await api.get('/users/me/settings');
+      const { data } = await api.get("/users/me/settings");
       setHasSmtpAppPassword(Boolean(data.hasSmtpAppPassword));
-      setSmtpUser(data.smtpUser?.trim() || data.email || '');
+      setSmtpUser(data.smtpUser?.trim() || data.email || "");
       setSmtpFromDisplayName(
-        data.smtpFromDisplayName?.trim() || data.name || ''
+        data.smtpFromDisplayName?.trim() || data.name || "",
       );
     } catch (e) {
       setBanner({
-        type: 'error',
-        text: e instanceof Error ? e.message : 'Could not load settings.',
+        type: "error",
+        text: e instanceof Error ? e.message : "Could not load settings.",
       });
     } finally {
       setLoading(false);
@@ -45,46 +45,46 @@ export default function Settings() {
     setBanner(null);
     try {
       const payload = {
-        smtpUser: smtpUser.trim() === '' ? '' : smtpUser.trim().toLowerCase(),
+        smtpUser: smtpUser.trim() === "" ? "" : smtpUser.trim().toLowerCase(),
         smtpFromDisplayName: smtpFromDisplayName.trim(),
       };
-      if (smtpAppPassword.trim() !== '') {
+      if (smtpAppPassword.trim() !== "") {
         payload.smtpAppPassword = smtpAppPassword;
       }
-      const { data } = await api.patch('/users/me/settings', payload);
+      const { data } = await api.patch("/users/me/settings", payload);
       setHasSmtpAppPassword(Boolean(data.hasSmtpAppPassword));
-      setSmtpUser(data.smtpUser?.trim() || data.email || '');
+      setSmtpUser(data.smtpUser?.trim() || data.email || "");
       setSmtpFromDisplayName(
-        data.smtpFromDisplayName?.trim() || data.name || ''
+        data.smtpFromDisplayName?.trim() || data.name || "",
       );
-      setSmtpAppPassword('');
+      setSmtpAppPassword("");
       setBanner({
-        type: 'success',
-        text: 'SMTP settings saved. Campaigns use these credentials — not server .env.',
+        type: "success",
+        text: "SMTP settings saved. Campaigns use these credentials",
       });
     } catch (err) {
       setBanner({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Save failed.',
+        type: "error",
+        text: err instanceof Error ? err.message : "Save failed.",
       });
     }
     setSaving(false);
   }
 
   async function handleClearPassword() {
-    setSmtpAppPassword('');
+    setSmtpAppPassword("");
     setSaving(true);
     setBanner(null);
     try {
-      const { data } = await api.patch('/users/me/settings', {
-        smtpAppPassword: '',
+      const { data } = await api.patch("/users/me/settings", {
+        smtpAppPassword: "",
       });
       setHasSmtpAppPassword(Boolean(data.hasSmtpAppPassword));
-      setBanner({ type: 'success', text: 'Stored app password removed.' });
+      setBanner({ type: "success", text: "Stored app password removed." });
     } catch (err) {
       setBanner({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Could not clear password.',
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not clear password.",
       });
     }
     setSaving(false);
@@ -101,16 +101,24 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Card>
-        <CardHeader
-          title="SMTP & sender"
-          description="Gmail credentials and From name are stored for your account (password encrypted). You do not need SMTP_USER / EMAIL_FROM in .env for your own sends."
-        />
+        <CardHeader title="SMTP & sender" />
+
+        <div style={{ marginTop: "10px" }}>
+          <a
+            href="https://www.youtube.com/watch?v=I9x0w8cjR_o"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "#3b82f6", textDecoration: "underline" }}
+          >
+            How to generate Gmail App Password (Watch Video)
+          </a>
+        </div>
         {banner && (
           <div
             className={
-              banner.type === 'success'
-                ? 'mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800'
-                : 'mb-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-800'
+              banner.type === "success"
+                ? "mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+                : "mb-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-800"
             }
             role="status"
           >
@@ -126,11 +134,11 @@ export default function Settings() {
               autoComplete="username"
               value={smtpUser}
               onChange={(e) => setSmtpUser(e.target.value)}
-              placeholder={user?.email || 'you@gmail.com'}
+              placeholder={user?.email || "you@gmail.com"}
             />
             <p className="mt-1.5 text-xs text-slate-500">
-              Same as the Google account for your app password. Leave empty to use
-              your MailPilot login email.
+              Same as the Google account for your app password. Leave empty to
+              use your MailPilot login email.
             </p>
           </div>
 
@@ -174,7 +182,7 @@ export default function Settings() {
 
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Save SMTP settings'}
+              {saving ? "Saving…" : "Save SMTP settings"}
             </Button>
             <Button
               type="button"
