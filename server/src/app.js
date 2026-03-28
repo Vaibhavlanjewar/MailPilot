@@ -56,53 +56,62 @@ function isVercelAppOrigin(origin) {
 }
 
 /**
- * Vercel frontends: allowed if CORS_ALLOW_VERCEL=true, or in production by default
- * (so PATCH/settings works without FRONTEND_URL). Set CORS_STRICT=true to disable.
+ * Single allow check for browser Origin (used by cors + explicit preflight).
+ * Default: FRONTEND_URL / CORS_ORIGINS + all https://*.vercel.app (Render may omit NODE_ENV=production).
+ * Set CORS_STRICT=true to allow only listed origins.
  */
-function isAllowedVercelOrigin(origin) {
-  if (!isVercelAppOrigin(origin)) return false;
-  if (process.env.CORS_ALLOW_VERCEL === "true") return true;
-  if (
-    env.nodeEnv === "production" &&
-    process.env.CORS_STRICT !== "true"
-  ) {
-    return true;
-  }
-  return false;
+function isCorsOriginAllowed(originHeader) {
+  if (!originHeader) return true;
+  const normalized = normalizeOrigin(originHeader);
+  if (corsAllowedOrigins.includes(normalized)) return true;
+  if (process.env.CORS_STRICT === "true") return false;
+  return isVercelAppOrigin(normalized);
 }
 
 function corsOriginValidator(origin, callback) {
   if (!origin) return callback(null, true);
-
-  const normalized = normalizeOrigin(origin);
-
-  if (corsAllowedOrigins.includes(normalized)) {
-    return callback(null, true);
-  }
-
-  if (isAllowedVercelOrigin(normalized)) {
-    return callback(null, true);
-  }
-
-  if (env.nodeEnv === "production") {
-    console.warn("[cors] Blocked origin (set FRONTEND_URL or CORS_ALLOW_VERCEL=true):", normalized);
-  }
-
+  if (isCorsOriginAllowed(origin)) return callback(null, true);
+  console.warn("[cors] Blocked origin:", normalizeOrigin(origin));
   return callback(null, false);
 }
 
-// ⚠️ Warning
+const CORS_ALLOW_METHODS =
+  "GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS";
+const CORS_ALLOW_HEADERS = "Content-Type, Authorization";
+
+/**
+ * Answer OPTIONS /api/* here so preflight always includes Allow-Methods (PATCH, etc.).
+ * The cors package can omit them when origin validation fails in subtle ways.
+ */
+function handleApiCorsPreflight(req, res, next) {
+  if (req.method !== "OPTIONS") return next();
+  if (!req.path.startsWith("/api")) return next();
+
+  const origin = req.headers.origin;
+  if (origin && !isCorsOriginAllowed(origin)) {
+    return res.sendStatus(403);
+  }
+
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+  res.setHeader("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
+  res.setHeader("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
+  res.setHeader("Access-Control-Max-Age", "86400");
+  return res.status(204).end();
+}
+
 if (
   env.nodeEnv === "production" &&
   corsAllowedOrigins.every((o) => /localhost|127\.0\.0\.1/i.test(o)) &&
   process.env.CORS_STRICT === "true"
 ) {
   console.warn(
-    "[cors] FRONTEND_URL is localhost-only and CORS_STRICT=true — Vercel will be blocked unless you set FRONTEND_URL or CORS_ALLOW_VERCEL.",
+    "[cors] FRONTEND_URL is localhost-only and CORS_STRICT=true — add FRONTEND_URL or CORS_ORIGINS.",
   );
 }
 
-// ✅ SINGLE SOURCE OF TRUTH
 const corsOptions = {
   origin: corsOriginValidator,
   credentials: true,
@@ -111,11 +120,8 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-// ✅ APPLY CORS
+app.use(handleApiCorsPreflight);
 app.use(cors(corsOptions));
-
-// ✅ FIX: preflight must use SAME options
-app.options("*", cors(corsOptions));
 
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
