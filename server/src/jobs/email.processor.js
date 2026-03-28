@@ -5,6 +5,7 @@ import { User } from '../models/User.js';
 import { sendCampaignMail } from '../services/email/campaignSend.js';
 import { maybeFinishCampaign } from '../services/campaign.queue.service.js';
 import { resolveCampaignFrom } from '../utils/mailFrom.js';
+import { formatEmailSendErrorForLog } from '../utils/smtpErrors.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -67,7 +68,7 @@ export async function processEmailJob(job) {
       messageId: result.messageId,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = formatEmailSendErrorForLog(err);
     logger.warn('Email send failed', {
       emailLogId,
       attempt: job.attemptsMade + 1,

@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
+import { getSmtpConnectionOptions } from '../../utils/smtpConnectionOptions.js';
 
 export class NodemailerProvider {
   constructor() {
@@ -21,11 +22,14 @@ export class NodemailerProvider {
         'SMTP_HOST looks like Gmail but SMTP_USER/SMTP_PASS are missing — sends will fail with 530 Authentication Required. Use an App Password (Google Account → Security) or a different SMTP.'
       );
     }
+    const conn = getSmtpConnectionOptions();
     this._transport = nodemailer.createTransport({
       host,
       port,
       secure,
       auth: hasAuth ? { user, pass } : undefined,
+      ...conn,
+      ...(port === 587 && !secure ? { requireTLS: true } : {}),
     });
   }
 

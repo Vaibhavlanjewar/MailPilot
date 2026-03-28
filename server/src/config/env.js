@@ -31,11 +31,29 @@ export const env = {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    /** Nodemailer timeouts (ms). Defaults match nodemailer’s built-ins (~2m / 30s / 10m). */
+    smtpConnection: {
+      connectionTimeoutMs:
+        Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 120_000,
+      greetingTimeoutMs:
+        Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 30_000,
+      socketTimeoutMs:
+        Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 600_000,
+    },
     ses: {
       region: process.env.AWS_REGION,
     },
   },
   runEmailWorker: process.env.RUN_EMAIL_WORKER !== 'false',
+  /** BullMQ worker: higher values = faster delivery (respect your SMTP provider limits). */
+  emailWorker: {
+    concurrency: Math.max(1, Number(process.env.EMAIL_WORKER_CONCURRENCY) || 1),
+    rateLimitMax: Math.max(1, Number(process.env.EMAIL_RATE_LIMIT_MAX) || 1),
+    rateLimitDurationMs: Math.max(
+      1,
+      Number(process.env.EMAIL_RATE_LIMIT_DURATION_MS) || 1000
+    ),
+  },
   apiRateLimitMax: Number(process.env.API_RATE_LIMIT_MAX) || 200,
 };
 

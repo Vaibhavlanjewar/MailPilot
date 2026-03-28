@@ -110,20 +110,21 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
 
   const queue = getEmailQueue();
 
-  for (const logId of emailLogIds) {
-    await queue.add(
-      'send-email',
-      { emailLogId: logId.toString() },
-      {
-        jobId: logId.toString(),
-        delay: delayMs,
-        attempts: JOB_ATTEMPTS,
-        backoff: { type: 'exponential', delay: BACKOFF_MS },
-        removeOnComplete: { age: 86400 },
-        removeOnFail: { age: 7 * 86400 },
-      }
-    );
-  }
+  const sharedOpts = {
+    delay: delayMs,
+    attempts: JOB_ATTEMPTS,
+    backoff: { type: 'exponential', delay: BACKOFF_MS },
+    removeOnComplete: { age: 86400 },
+    removeOnFail: { age: 7 * 86400 },
+  };
+
+  await queue.addBulk(
+    emailLogIds.map((logId) => ({
+      name: 'send-email',
+      data: { emailLogId: logId.toString() },
+      opts: { jobId: logId.toString(), ...sharedOpts },
+    }))
+  );
 
   logger.info('Campaign enqueued', {
     campaignId,

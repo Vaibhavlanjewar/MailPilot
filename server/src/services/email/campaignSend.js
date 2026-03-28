@@ -2,12 +2,15 @@ import nodemailer from 'nodemailer';
 import { env } from '../../config/env.js';
 import { getEmailProvider } from './index.js';
 import { decryptSecret } from '../../utils/secretCrypto.js';
+import { getSmtpConnectionOptions } from '../../utils/smtpConnectionOptions.js';
 
 /** Google SMTP — works for @gmail.com and Google Workspace. */
 const GMAIL_TRANSPORT = {
   host: 'smtp.gmail.com',
   port: 587,
   secure: false,
+  requireTLS: true,
+  ...getSmtpConnectionOptions(),
 };
 
 /**
