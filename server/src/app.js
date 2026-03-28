@@ -42,10 +42,8 @@ const corsAllowedOrigins = [
   ),
 ];
 
-// ✅ Allow Vercel preview URLs
-function isAllowedVercelOrigin(origin) {
-  if (process.env.CORS_ALLOW_VERCEL !== "true") return false;
-
+/** HTTPS origins on *.vercel.app (production + preview deploys). */
+function isVercelAppOrigin(origin) {
   try {
     const u = new URL(origin);
     return (
@@ -57,11 +55,23 @@ function isAllowedVercelOrigin(origin) {
   }
 }
 
-// ✅ CORS validator (SAFE VERSION)
-function corsOriginValidator(origin, callback) {
-  console.log("Incoming Origin:", origin);
-  console.log("Allowed Origins:", corsAllowedOrigins);
+/**
+ * Vercel frontends: allowed if CORS_ALLOW_VERCEL=true, or in production by default
+ * (so PATCH/settings works without FRONTEND_URL). Set CORS_STRICT=true to disable.
+ */
+function isAllowedVercelOrigin(origin) {
+  if (!isVercelAppOrigin(origin)) return false;
+  if (process.env.CORS_ALLOW_VERCEL === "true") return true;
+  if (
+    env.nodeEnv === "production" &&
+    process.env.CORS_STRICT !== "true"
+  ) {
+    return true;
+  }
+  return false;
+}
 
+function corsOriginValidator(origin, callback) {
   if (!origin) return callback(null, true);
 
   const normalized = normalizeOrigin(origin);
@@ -74,19 +84,21 @@ function corsOriginValidator(origin, callback) {
     return callback(null, true);
   }
 
-  console.warn("❌ Blocked by CORS:", normalized);
+  if (env.nodeEnv === "production") {
+    console.warn("[cors] Blocked origin (set FRONTEND_URL or CORS_ALLOW_VERCEL=true):", normalized);
+  }
 
-  // ❗ IMPORTANT: don't throw error
   return callback(null, false);
 }
 
 // ⚠️ Warning
 if (
   env.nodeEnv === "production" &&
-  corsAllowedOrigins.every((o) => /localhost|127\.0\.0\.1/i.test(o))
+  corsAllowedOrigins.every((o) => /localhost|127\.0\.0\.1/i.test(o)) &&
+  process.env.CORS_STRICT === "true"
 ) {
   console.warn(
-    "[cors] FRONTEND_URL is localhost-only. Set it to your Vercel URL.",
+    "[cors] FRONTEND_URL is localhost-only and CORS_STRICT=true — Vercel will be blocked unless you set FRONTEND_URL or CORS_ALLOW_VERCEL.",
   );
 }
 
