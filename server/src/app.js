@@ -20,15 +20,38 @@ const clientDist = path.resolve(__dirname, "../../client/dist");
 const serveClient =
   env.nodeEnv === "production" && fs.existsSync(clientDist);
 
-app.use(helmet());
+const extraCorsOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const corsAllowedOrigins = [
+  ...new Set([env.frontendUrl, ...extraCorsOrigins].filter(Boolean)),
+];
+
+function corsOriginValidator(origin, callback) {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+  if (corsAllowedOrigins.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(null, false);
+}
+
+// CORS before helmet so preflight responses always include Allow-Methods (PATCH, etc.).
+// Browsers reject `origin: "*"` together with `credentials: true`; use an explicit allow list.
 app.use(
   cors({
-    origin: "*",
+    origin: corsOriginValidator,
     credentials: true,
     methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
   }),
 );
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(createApiRateLimiter());
