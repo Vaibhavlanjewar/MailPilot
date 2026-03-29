@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
@@ -14,15 +14,17 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false,
     },
-    name: { type: String, trim: true, default: '' },
+    name: { type: String, trim: true, default: "" },
     /** SMTP login (e.g. Gmail). Empty = use account email. */
-    smtpUser: { type: String, trim: true, lowercase: true, default: '' },
+    smtpUser: { type: String, trim: true, lowercase: true, default: "" },
     /** Shown in From: "Name" <smtpUser|email> — e.g. MailChips */
-    smtpFromDisplayName: { type: String, trim: true, default: '' },
+    smtpFromDisplayName: { type: String, trim: true, default: "" },
     /** AES-GCM encrypted app password (never returned to clients). */
-    smtpAppPasswordEnc: { type: String, select: false, default: '' },
+    smtpAppPasswordEnc: { type: String, select: false, default: "" },
+    /** AES-GCM encrypted Gmail OAuth refresh token (never returned to clients). */
+    gmailRefreshTokenEnc: { type: String, select: false, default: "" },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const User = mongoose.model('User', userSchema);
+export const User = mongoose.model("User", userSchema);

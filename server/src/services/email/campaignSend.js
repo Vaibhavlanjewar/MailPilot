@@ -1,12 +1,13 @@
-import nodemailer from 'nodemailer';
-import { env } from '../../config/env.js';
-import { getEmailProvider } from './index.js';
-import { decryptSecret } from '../../utils/secretCrypto.js';
-import { getSmtpConnectionOptions } from '../../utils/smtpConnectionOptions.js';
+import nodemailer from "nodemailer";
+import { env } from "../../config/env.js";
+import { getEmailProvider } from "./index.js";
+import { decryptSecret } from "../../utils/secretCrypto.js";
+import { getSmtpConnectionOptions } from "../../utils/smtpConnectionOptions.js";
+import { sendViaGmailApi } from "./gmailApi.provider.js";
 
 /** Google SMTP — works for @gmail.com and Google Workspace. */
 const GMAIL_TRANSPORT = {
-  host: 'smtp.gmail.com',
+  host: "smtp.gmail.com",
   port: 587,
   secure: false,
   requireTLS: true,
@@ -20,11 +21,29 @@ const GMAIL_TRANSPORT = {
  */
 export async function sendCampaignMail(owner, params) {
   const { to, subject, html, text, from } = params;
+
+  const gmailResult = await sendViaGmailApi({
+    owner,
+    to,
+    subject,
+    html,
+    text,
+    from,
+  });
+  if (gmailResult) {
+    return gmailResult;
+  }
+
+  if (env.email.provider === "gmail-api") {
+    throw new Error(
+      "EMAIL_PROVIDER is gmail-api but no valid Gmail API credentials were found (OAuth env vars + refresh token).",
+    );
+  }
+
   const enc = owner?.smtpAppPasswordEnc;
   const pass = enc ? decryptSecret(enc) : null;
   const authUser =
-    (owner?.smtpUser && String(owner.smtpUser).trim()) ||
-    owner?.email?.trim();
+    (owner?.smtpUser && String(owner.smtpUser).trim()) || owner?.email?.trim();
 
   if (pass && authUser) {
     const transport = nodemailer.createTransport({
@@ -39,7 +58,7 @@ export async function sendCampaignMail(owner, params) {
         html,
         text: text || undefined,
       });
-      return { messageId: info.messageId || '', response: info.response };
+      return { messageId: info.messageId || "", response: info.response };
     } finally {
       transport.close();
     }
@@ -47,7 +66,7 @@ export async function sendCampaignMail(owner, params) {
 
   if (!env.email.smtp.host) {
     throw new Error(
-      'Configure SMTP in Settings (SMTP user, app password, sender name) or set SMTP_HOST in server .env.'
+      "Configure SMTP in Settings (SMTP user, app password, sender name) or set SMTP_HOST in server .env.",
     );
   }
 
