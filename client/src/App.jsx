@@ -10,6 +10,7 @@ import Contacts from './pages/Contacts';
 import Templates from './pages/Templates';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
+import HowToUse from './pages/HowToUse';
 import Pricing from './pages/Pricing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="templates" element={<Templates />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="how-to-use" element={<HowToUse />} />
           <Route path="pricing" element={<Pricing />} />
         </Route>
       </Route>
