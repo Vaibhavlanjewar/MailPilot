@@ -38,7 +38,7 @@ export default function DataTable({
                   key={col.key}
                   scope="col"
                   className={cn(
-                    'px-4 py-3 font-semibold text-app-muted sm:px-5',
+                    'px-4 py-3 font-bold text-black sm:px-5',
                     col.className
                   )}
                 >

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import ThemeToggle from "../components/ui/ThemeToggle";
 import { useAuth } from "../context/AuthContext";
@@ -56,8 +56,15 @@ const googleFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSff_YjvIVpgc6umn
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const velocityRef = useRef(null);
   const [velocityAnimCycle, setVelocityAnimCycle] = useState(0);
+
+  function handleUpcomingCardClick(title) {
+    if (title !== "Email open tracking") return;
+    if (!isAuthenticated) return;
+    navigate("/app/email-tracking");
+  }
 
   useEffect(() => {
     const node = velocityRef.current;
@@ -243,10 +250,47 @@ export default function Landing() {
             {upcomingFeatures.map((item) => (
               <article
                 key={item.title}
-                className="rounded-2xl border border-[color:var(--surface-border)] bg-[var(--surface)] p-6 shadow-app-soft transition hover:-translate-y-0.5 hover:shadow-app-elevated"
+                className="relative rounded-2xl border border-[color:var(--surface-border)] bg-[var(--surface)] p-6 shadow-app-soft transition hover:-translate-y-0.5 hover:shadow-app-elevated"
+                onClick={() => handleUpcomingCardClick(item.title)}
+                role={item.title === "Email open tracking" && isAuthenticated ? "button" : undefined}
+                tabIndex={item.title === "Email open tracking" && isAuthenticated ? 0 : undefined}
+                onKeyDown={(event) => {
+                  if (item.title !== "Email open tracking" || !isAuthenticated) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigate("/app/email-tracking");
+                  }
+                }}
+                aria-label={
+                  item.title === "Email open tracking" && isAuthenticated
+                    ? "Open Email Tracking dashboard"
+                    : undefined
+                }
+                style={{
+                  cursor:
+                    item.title === "Email open tracking" && isAuthenticated
+                      ? "pointer"
+                      : "default",
+                }}
               >
-                <h3 className="text-lg font-semibold tracking-tight">
-                  {item.title}
+                <span
+                  className={[
+                    'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                    item.title === 'Email open tracking'
+                      ? 'border-[color:rgba(var(--secondary-rgb),0.45)] bg-[color:rgba(var(--secondary-rgb),0.14)] text-[var(--secondary)]'
+                      : 'border-[color:rgba(var(--primary-rgb),0.4)] bg-[color:rgba(var(--primary-rgb),0.12)] text-[var(--primary)]',
+                  ].join(' ')}
+                >
+                  <span className="relative inline-flex h-2 w-2">
+                    {item.title === 'Email open tracking' ? (
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-70" />
+                    ) : null}
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
+                  </span>
+                  {item.title === 'Email open tracking' ? 'Live-Now' : 'Coming-Soon'}
+                </span>
+                <h3 className="pr-28 text-lg font-semibold tracking-tight">
+                  <span>{item.title}</span>
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
                   {item.text}
