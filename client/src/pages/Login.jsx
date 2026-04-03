@@ -18,6 +18,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   if (!ready) {
     return (
@@ -42,6 +43,30 @@ export default function Login() {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const data = await window.fetch(
+        `${import.meta.env.VITE_API_URL || '/api'}/auth/google/url?from=${encodeURIComponent(from)}`,
+      ).then(async (resp) => {
+        if (!resp.ok) {
+          const payload = await resp.json().catch(() => ({}));
+          throw new Error(payload?.message || 'Could not start Google login');
+        }
+        return resp.json();
+      });
+
+      if (!data?.url) {
+        throw new Error('Could not start Google login');
+      }
+      window.location.assign(data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start Google login');
+      setGoogleLoading(false);
     }
   }
 
@@ -92,6 +117,15 @@ export default function Login() {
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in…' : 'Sign in'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              disabled={googleLoading || loading}
+              onClick={handleGoogleLogin}
+            >
+              {googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-app-muted">

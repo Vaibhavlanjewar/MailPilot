@@ -14,12 +14,14 @@ import HowToUse from './pages/HowToUse';
 import Pricing from './pages/Pricing';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import GoogleLoginCallback from './pages/GoogleLoginCallback';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/login/google/callback" element={<GoogleLoginCallback />} />
       <Route path="/register" element={<Register />} />
 
       <Route element={<ProtectedRoute />}>

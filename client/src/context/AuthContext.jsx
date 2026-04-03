@@ -59,6 +59,15 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
+  const completeOAuthLogin = useCallback(({ token, user: nextUser }) => {
+    if (!token || !nextUser?.id || !nextUser?.email) {
+      throw new Error('Invalid Google login response');
+    }
+    setAuthToken(token);
+    localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    setUser(nextUser);
+  }, []);
+
   const updateUser = useCallback((nextUser) => {
     setUser((prev) => {
       const merged = { ...(prev || {}), ...(nextUser || {}) };
@@ -74,10 +83,11 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(getAuthToken() && user),
       login,
       register,
+      completeOAuthLogin,
       updateUser,
       logout,
     }),
-    [user, ready, login, register, updateUser, logout]
+    [user, ready, login, register, completeOAuthLogin, updateUser, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

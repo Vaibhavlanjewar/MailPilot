@@ -34,6 +34,26 @@ function frontendSettingsUrl(status, message = "") {
   return url.toString();
 }
 
+function frontendGoogleCallbackUrl(params = {}) {
+  const base = `${env.frontendUrl || "http://localhost:5173"}`.replace(/\/$/, "");
+  const url = new URL(`${base}/login/google/callback`);
+
+  if (params.token) url.searchParams.set("token", params.token);
+  if (params.id) url.searchParams.set("id", params.id);
+  if (params.email) url.searchParams.set("email", params.email);
+  if (params.name) url.searchParams.set("name", params.name);
+  if (params.from) url.searchParams.set("from", params.from);
+  if (params.error) url.searchParams.set("error", params.error);
+
+  return url.toString();
+}
+
+function signToken(userId) {
+  return jwt.sign({ sub: userId }, env.jwt.secret, {
+    expiresIn: env.jwt.expiresIn,
+  });
+}
+
 function settingsPayload(user) {
   return {
     email: user.email,
@@ -314,13 +334,96 @@ export async function gmailOauthCallback(req, res, next) {
       return res.redirect(frontendSettingsUrl("error", "Invalid or expired OAuth state"));
     }
 
-    if (!payload?.sub || payload?.purpose !== "gmail-connect") {
-      return res.redirect(frontendSettingsUrl("error", "Invalid OAuth state payload"));
-    }
-
     const oauth2Client = getGmailOauthClient();
     const tokenResponse = await oauth2Client.getToken(code);
     const tokens = tokenResponse.tokens || {};
+
+    if (payload?.purpose === "google-login") {
+      oauth2Client.setCredentials(tokens);
+
+      let googleEmail = "";
+      let googleName = "";
+      try {
+        const oauth2Api = google.oauth2({ version: "v2", auth: oauth2Client });
+        const profile = await oauth2Api.userinfo.get();
+        if (profile?.data?.email && validator.isEmail(String(profile.data.email))) {
+          googleEmail = String(profile.data.email).trim().toLowerCase();
+        }
+        if (typeof profile?.data?.name === "string") {
+          googleName = profile.data.name.trim();
+        }
+      } catch {
+        return res.redirect(frontendGoogleCallbackUrl({ error: "Could not read Google account profile" }));
+      }
+
+      if (!googleEmail) {
+        return res.redirect(frontendGoogleCallbackUrl({ error: "Google account email is missing" }));
+      }
+
+      let user = await User.findOne({ email: googleEmail }).select(
+        "_id email name smtpUser gmailRefreshTokenEnc",
+      );
+
+      if (!user && !tokens.refresh_token) {
+        return res.redirect(
+          frontendGoogleCallbackUrl({
+            error:
+              "No refresh token returned. Remove app access from your Google account and try again.",
+          }),
+        );
+      }
+
+      if (!user) {
+        const passwordHash = await bcrypt.hash(
+          `google-oauth-${Date.now()}-${Math.random()}`,
+          12,
+        );
+        user = await User.create({
+          email: googleEmail,
+          name: googleName,
+          passwordHash,
+          smtpUser: googleEmail,
+          ...(tokens.refresh_token
+            ? { gmailRefreshTokenEnc: encryptSecret(tokens.refresh_token) }
+            : {}),
+        });
+      } else {
+        let changed = false;
+        if (!user.name && googleName) {
+          user.name = googleName;
+          changed = true;
+        }
+        if (!user.smtpUser) {
+          user.smtpUser = googleEmail;
+          changed = true;
+        }
+        if (tokens.refresh_token) {
+          user.gmailRefreshTokenEnc = encryptSecret(tokens.refresh_token);
+          changed = true;
+        }
+        if (changed) {
+          await user.save();
+        }
+      }
+
+      const token = signToken(user._id.toString());
+      return res.redirect(
+        frontendGoogleCallbackUrl({
+          token,
+          id: user._id.toString(),
+          email: user.email,
+          name: user.name || "",
+          from:
+            typeof payload?.from === "string" && payload.from.startsWith("/")
+              ? payload.from
+              : "/app",
+        }),
+      );
+    }
+
+    if (!payload?.sub || payload?.purpose !== "gmail-connect") {
+      return res.redirect(frontendSettingsUrl("error", "Invalid OAuth state payload"));
+    }
 
     if (!tokens.refresh_token) {
       return res.redirect(

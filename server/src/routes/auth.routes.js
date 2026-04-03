@@ -24,4 +24,7 @@ router.post(
   authController.login
 );
 
+router.get('/google/url', authController.getGoogleLoginUrl);
+router.get('/google/callback', authController.googleOauthCallback);
+
 export default router;
