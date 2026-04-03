@@ -45,6 +45,9 @@ export async function getAnalyticsSummary(req, res, next) {
       summary.totalRecipients > 0 ? (100 * summary.totalSent) / summary.totalRecipients : 0;
     const failureRate =
       summary.totalRecipients > 0 ? (100 * summary.totalFailed) / summary.totalRecipients : 0;
+    const successDenominator = summary.totalSent + summary.totalFailed;
+    const successRate =
+      successDenominator > 0 ? (100 * summary.totalSent) / successDenominator : 0;
 
     const recentCampaigns = campaigns.slice(0, 7).map((campaign) => {
       const total = normalizeCount(
@@ -68,6 +71,7 @@ export async function getAnalyticsSummary(req, res, next) {
         ...summary,
         deliveryRate,
         failureRate,
+        successRate,
       },
       recentCampaigns,
       statusBreakdown: [
