@@ -8,8 +8,8 @@ export default function LoadingSpinner({ className, label = 'Loading' }) {
       aria-live="polite"
       aria-label={label}
     >
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
-      <p className="text-sm text-slate-500">{label}</p>
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-[color:var(--surface-border)] border-t-[color:var(--primary)]" />
+      <p className="text-sm text-app-muted">{label}</p>
     </div>
   );
 }

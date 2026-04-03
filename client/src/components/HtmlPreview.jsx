@@ -8,12 +8,12 @@ export function HtmlViewModeToggle({ value, onChange, className }) {
   const base =
     'rounded-md max-sm:flex-1 px-3 py-1.5 text-sm font-medium transition-colors';
   const active =
-    'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100';
-  const idle = 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100';
+    'bg-app-surface text-app shadow-app-soft';
+  const idle = 'text-app-muted hover:text-app';
   return (
     <div
       className={cn(
-        'inline-flex max-sm:w-full gap-0.5 rounded-lg border border-surface-border bg-slate-50 p-0.5 dark:border-slate-600 dark:bg-slate-900',
+        'inline-flex max-sm:w-full gap-0.5 rounded-xl border border-surface-border bg-app-muted p-0.5',
         className
       )}
       role="tablist"
@@ -51,14 +51,14 @@ export default function HtmlPreview({
 }) {
   const trimmed = html?.trim() ?? '';
   const srcDoc = trimmed
-    ? `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;line-height:1.5;margin:12px;color:#0f172a;word-wrap:break-word;}</style></head><body>${trimmed}</body></html>`
+    ? `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:14px;line-height:1.5;margin:12px;color:#111827;word-wrap:break-word;}</style></head><body>${trimmed}</body></html>`
     : '';
 
   if (!srcDoc) {
     return (
       <div
         className={cn(
-          'rounded-lg border border-dashed border-surface-border bg-slate-50 p-8 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-800/50 dark:text-slate-400',
+          'rounded-xl border border-dashed border-surface-border bg-app-muted p-8 text-center text-sm text-app-muted',
           className
         )}
       >
@@ -73,7 +73,7 @@ export default function HtmlPreview({
       sandbox=""
       srcDoc={srcDoc}
       className={cn(
-        'w-full rounded-lg border border-surface-border bg-white shadow-sm dark:border-slate-600 dark:bg-slate-950',
+        'w-full rounded-xl border border-surface-border bg-app-surface shadow-app-soft',
         className
       )}
       style={{ minHeight }}

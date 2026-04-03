@@ -3,15 +3,16 @@ import { cn } from '../../utils/cn';
 
 const variants = {
   primary:
-    'bg-brand-600 text-white hover:bg-brand-700 shadow-sm border border-transparent',
+    'bg-app-gradient text-white shadow-app-soft border border-transparent hover:-translate-y-0.5 hover:brightness-110',
   secondary:
-    'bg-white text-slate-700 border border-surface-border hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700 border border-transparent',
-  ghost: 'text-slate-600 hover:bg-slate-100 border border-transparent',
+    'bg-transparent text-[var(--primary)] border border-[color:var(--primary)] hover:bg-[color:rgba(var(--primary-rgb),0.08)]',
+  danger:
+    'bg-[color:rgba(var(--primary-rgb),0.1)] text-[var(--primary)] border border-[color:rgba(var(--primary-rgb),0.28)] hover:bg-[color:rgba(var(--primary-rgb),0.16)]',
+  ghost: 'text-app-muted hover:bg-app-muted border border-transparent',
 };
 
 const baseClass =
-  'inline-flex items-center justify-center rounded-lg font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500';
+  'inline-flex items-center justify-center rounded-xl font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-focus focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]';
 
 export function LinkButton({
   to,

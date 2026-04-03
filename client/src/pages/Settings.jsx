@@ -7,16 +7,23 @@ import { api } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
 export default function Settings() {
-  const { user, ready } = useAuth();
+  const { user, ready, updateUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [hasGmailRefreshToken, setHasGmailRefreshToken] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpFromDisplayName, setSmtpFromDisplayName] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [banner, setBanner] = useState(null);
+  const [activeSection, setActiveSection] = useState("");
 
   function gmailFallbackName(email) {
     const value = typeof email === 'string' ? email.trim() : '';
@@ -30,6 +37,8 @@ export default function Settings() {
     try {
       const { data } = await api.get("/users/me/settings");
       setHasGmailRefreshToken(Boolean(data.hasGmailRefreshToken));
+      setProfileName(data.name || "");
+      setProfileEmail(data.email || "");
       setSmtpUser(data.smtpUser?.trim() || data.email || "");
       setSmtpFromDisplayName(
         data.smtpFromDisplayName?.trim() || gmailFallbackName(data.smtpUser || data.email) || data.name || "",
@@ -52,6 +61,9 @@ export default function Settings() {
     const params = new URLSearchParams(location.search);
     const gmail = params.get("gmail");
     const message = params.get("message");
+    const section = params.get("section") || "";
+
+    setActiveSection(section);
     if (!gmail) return;
 
     if (gmail === "connected") {
@@ -135,6 +147,51 @@ export default function Settings() {
     setSaving(false);
   }
 
+  async function handleSaveProfile(e) {
+    e.preventDefault();
+    setProfileSaving(true);
+    setBanner(null);
+    try {
+      const { data } = await api.patch("/users/me/profile", {
+        name: profileName.trim(),
+        email: profileEmail.trim().toLowerCase(),
+      });
+      if (data?.user) {
+        updateUser(data.user);
+        setProfileName(data.user.name || "");
+        setProfileEmail(data.user.email || "");
+      }
+      setBanner({ type: "success", text: "Profile updated successfully." });
+    } catch (err) {
+      setBanner({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not update profile.",
+      });
+    }
+    setProfileSaving(false);
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPasswordSaving(true);
+    setBanner(null);
+    try {
+      await api.patch("/users/me/password", {
+        currentPassword,
+        newPassword,
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setBanner({ type: "success", text: "Password changed successfully." });
+    } catch (err) {
+      setBanner({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not change password.",
+      });
+    }
+    setPasswordSaving(false);
+  }
+
   if (!ready || loading) {
     return (
       <div className="flex min-h-[200px] items-center justify-center text-sm text-slate-500">
@@ -146,41 +203,7 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Card>
-        <CardHeader title="Gmail API" />
-        <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
-          Connect your Gmail once to send campaigns without entering app
-          passwords. Each user links their own Gmail account.
-        </p>
-        {hasGmailRefreshToken ? (
-          <p className="mb-4 text-sm font-medium text-emerald-800 dark:text-emerald-300">
-            Gmail is connected for this account.
-          </p>
-        ) : (
-          <p className="mb-4 text-sm text-amber-800 dark:text-amber-300">
-            Gmail is not connected. Click connect before sending campaigns.
-          </p>
-        )}
-        <div className="flex flex-wrap gap-3">
-          <Button
-            type="button"
-            onClick={handleConnectGmail}
-            disabled={connectingGmail || saving}
-          >
-            {connectingGmail ? "Redirecting…" : "Connect Gmail"}
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={saving || !hasGmailRefreshToken}
-            onClick={handleDisconnectGmail}
-          >
-            Disconnect Gmail
-          </Button>
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title="Sender" description="If you leave the sender name blank, we will use the Gmail name before the @ symbol." />
+        <CardHeader title="Profile" description="Sender details for campaign emails. If sender name is blank, we use the Gmail name before the @ symbol." />
         {banner && (
           <div
             className={
@@ -230,6 +253,107 @@ export default function Settings() {
             </Button>
           </div>
         </form>
+      </Card>
+
+      <Card className={activeSection === "profile" || activeSection === "email" ? "ring-2 ring-app-focus" : ""}>
+        <CardHeader title="Account profile" description="Update your name and login email from here." />
+        <form onSubmit={handleSaveProfile} className="space-y-5">
+          <div>
+            <Label htmlFor="profileName">Name</Label>
+            <Input
+              id="profileName"
+              type="text"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="Your name"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="profileEmail">Email</Label>
+            <Input
+              id="profileEmail"
+              type="email"
+              autoComplete="email"
+              value={profileEmail}
+              onChange={(e) => setProfileEmail(e.target.value)}
+              placeholder={user?.email || "you@example.com"}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit" disabled={profileSaving}>
+              {profileSaving ? "Saving…" : "Save profile"}
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card className={activeSection === "password" ? "ring-2 ring-app-focus" : ""}>
+        <CardHeader title="Change password" description="Use your current password to set a new password." />
+        <form onSubmit={handleChangePassword} className="space-y-5">
+          <div>
+            <Label htmlFor="currentPassword">Current password</Label>
+            <Input
+              id="currentPassword"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Current password"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="newPassword">New password</Label>
+            <Input
+              id="newPassword"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 8 characters"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit" disabled={passwordSaving}>
+              {passwordSaving ? "Saving…" : "Change password"}
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card className="p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Connect with Gmail</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {hasGmailRefreshToken
+                ? "Connected"
+                : "Not connected"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleConnectGmail}
+              disabled={connectingGmail || saving}
+            >
+              {connectingGmail ? "Redirecting…" : "Connect Gmail"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={saving || !hasGmailRefreshToken}
+              onClick={handleDisconnectGmail}
+            >
+              Disconnect
+            </Button>
+          </div>
+        </div>
       </Card>
     </div>
   );

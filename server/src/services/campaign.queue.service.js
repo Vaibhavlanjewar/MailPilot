@@ -1,12 +1,9 @@
 import { Campaign } from "../models/Campaign.js";
 import { Contact } from "../models/Contact.js";
 import { EmailLog } from "../models/EmailLog.js";
-import { User } from "../models/User.js";
-import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
 import { getEmailQueue } from "../queues/email.queue.js";
 import { logger } from "../utils/logger.js";
-import { getGmailAuthStatus } from "./email/gmailApi.provider.js";
 
 const JOB_ATTEMPTS = 3;
 const BACKOFF_MS = 5000;
@@ -35,23 +32,6 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
   const campaign = await Campaign.findOne({ _id: campaignId, userId });
   if (!campaign) {
     throw new AppError("Campaign not found", 404);
-  }
-
-  let ownerSnapshot = null;
-  if (env.email.provider === "gmail-api") {
-    const owner = await User.findById(userId)
-      .select("+gmailRefreshTokenEnc email smtpUser")
-      .lean();
-    const authStatus = getGmailAuthStatus(owner);
-    if (!authStatus.ok) {
-      throw new AppError(authStatus.reason, 422);
-    }
-
-    ownerSnapshot = {
-      gmailRefreshTokenEnc: owner?.gmailRefreshTokenEnc || "",
-      email: owner?.email || "",
-      smtpUser: owner?.smtpUser || "",
-    };
   }
 
   if (campaign.status === "processing" || campaign.status === "completed") {
@@ -157,7 +137,6 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
       name: "send-email",
       data: {
         emailLogId: logId.toString(),
-        owner: ownerSnapshot,
       },
       opts: {
         jobId: logId.toString(),

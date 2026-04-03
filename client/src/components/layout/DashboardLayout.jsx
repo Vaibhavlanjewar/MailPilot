@@ -4,13 +4,14 @@ import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 
 const titles = {
-  '/': 'Dashboard',
-  '/campaigns': 'Campaigns',
-  '/campaigns/new': 'Create campaign',
-  '/contacts': 'Contacts',
-  '/templates': 'Templates',
-  '/analytics': 'Analytics',
-  '/settings': 'Settings',
+  '/app': 'Dashboard',
+  '/app/campaigns': 'Campaigns',
+  '/app/campaigns/new': 'Create campaign',
+  '/app/contacts': 'Contacts',
+  '/app/templates': 'Templates',
+  '/app/analytics': 'Analytics',
+  '/app/settings': 'Settings',
+  '/app/pricing': 'Pricing',
 };
 
 export default function DashboardLayout() {
@@ -19,7 +20,7 @@ export default function DashboardLayout() {
   const title = titles[pathname] || 'MailPilot';
 
   return (
-    <div className="flex min-h-screen bg-surface-muted dark:bg-slate-950">
+    <div className="flex min-h-screen bg-app-bg">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col lg:ml-0">
         <Navbar onMenuClick={() => setSidebarOpen(true)} title={title} />

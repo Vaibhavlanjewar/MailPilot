@@ -269,7 +269,7 @@ export default function CreateCampaign() {
         ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
       });
 
-      navigate('/campaigns');
+      navigate('/app/campaigns');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -295,7 +295,7 @@ export default function CreateCampaign() {
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <Link to="/campaigns" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+        <Link to="/app/campaigns" className="text-sm font-medium text-brand-600 hover:text-brand-700">
           {'<- Back to campaigns'}
         </Link>
       </div>
@@ -531,7 +531,7 @@ export default function CreateCampaign() {
                 </Select>
                 <p className="mt-1.5 text-xs text-slate-500">
                   Templates are created under{' '}
-                  <Link to="/templates" className="font-medium text-brand-600 hover:text-brand-700">
+                  <Link to="/app/templates" className="font-medium text-brand-600 hover:text-brand-700">
                     Templates
                   </Link>
                   . Use placeholders like <span className="font-medium">{'{{name}}'}</span>, <span className="font-medium">{'{{first_name}}'}</span>, and <span className="font-medium">{'{{email}}'}</span> in subject or body.

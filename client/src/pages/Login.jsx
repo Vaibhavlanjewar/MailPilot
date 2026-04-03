@@ -12,7 +12,7 @@ export default function Login() {
   const { login, ready } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from || '/';
+  const from = location.state?.from || '/app';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,14 +21,14 @@ export default function Login() {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface-muted dark:bg-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-app-bg">
         <PageLoader />
       </div>
     );
   }
 
   if (getAuthToken()) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   async function handleSubmit(e) {
@@ -46,24 +46,24 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-surface-muted p-4 dark:bg-slate-950">
+    <div className="relative flex min-h-screen items-center justify-center bg-app-bg p-4">
       <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
         <ThemeToggle />
       </div>
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-lg font-bold text-white shadow-md">
+          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-app-gradient text-lg font-bold text-white shadow-app-soft">
             M
           </div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-white">MailPilot</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <h1 className="text-xl font-semibold text-app">MailPilot</h1>
+          <p className="text-sm text-app-muted">
             Sign in to manage campaigns
           </p>
         </div>
         <Card>
           <CardHeader title="Log in" description="Use the account you registered with." />
           {error && (
-            <div className="mb-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="alert-app mb-4 rounded-xl px-4 py-3 text-sm">
               {error}
             </div>
           )}
@@ -94,11 +94,11 @@ export default function Login() {
               {loading ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
-          <p className="mt-4 text-center text-sm text-slate-600 dark:text-slate-400">
+          <p className="mt-4 text-center text-sm text-app-muted">
             No account?{' '}
             <Link
               to="/register"
-              className="font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+              className="font-medium text-[var(--primary)] hover:text-[var(--secondary)]"
             >
               Register
             </Link>

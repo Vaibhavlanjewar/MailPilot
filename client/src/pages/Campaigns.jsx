@@ -85,7 +85,7 @@ export default function Campaigns() {
         <p className="max-w-xl text-sm text-slate-500">
           Campaigns from the API. After you submit a campaign, it appears here with live status.
         </p>
-        <LinkButton to="/campaigns/new" size="md">
+        <LinkButton to="/app/campaigns/new" size="md">
           Create campaign
         </LinkButton>
       </div>

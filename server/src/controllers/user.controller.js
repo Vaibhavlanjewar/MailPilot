@@ -1,4 +1,5 @@
 import validator from "validator";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { google } from "googleapis";
 import { User } from "../models/User.js";
@@ -44,6 +45,14 @@ function settingsPayload(user) {
   };
 }
 
+function authUserPayload(user) {
+  return {
+    id: user._id,
+    email: user.email,
+    name: user.name || "",
+  };
+}
+
 export async function getSettings(req, res, next) {
   try {
     const user = await User.findById(req.userId)
@@ -57,6 +66,93 @@ export async function getSettings(req, res, next) {
     }
 
     res.json(settingsPayload(user));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateProfile(req, res, next) {
+  try {
+    const { name, email } = req.body;
+    if (name === undefined && email === undefined) {
+      throw new AppError("Send at least one of: name, email", 422);
+    }
+
+    const update = {};
+
+    if (name !== undefined) {
+      if (typeof name !== "string") {
+        throw new AppError("name must be a string", 422);
+      }
+      update.name = name.trim();
+    }
+
+    if (email !== undefined) {
+      if (typeof email !== "string") {
+        throw new AppError("email must be a string", 422);
+      }
+      const normalized = email.trim().toLowerCase();
+      if (!validator.isEmail(normalized)) {
+        throw new AppError("email must be valid", 422);
+      }
+
+      const conflict = await User.findOne({
+        email: normalized,
+        _id: { $ne: req.userId },
+      })
+        .select("_id")
+        .lean();
+      if (conflict) {
+        throw new AppError("Email already in use", 409);
+      }
+      update.email = normalized;
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { $set: update },
+      { new: true },
+    ).select("_id email name");
+
+    if (!user) {
+      throw new AppError("User not found", 404);
+    }
+
+    res.json({ user: authUserPayload(user) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function changePassword(req, res, next) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      throw new AppError("currentPassword and newPassword are required", 422);
+    }
+    if (newPassword.length < 8) {
+      throw new AppError("newPassword must be at least 8 characters", 422);
+    }
+
+    const user = await User.findById(req.userId).select("+passwordHash");
+    if (!user) {
+      throw new AppError("User not found", 404);
+    }
+
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) {
+      throw new AppError("Current password is incorrect", 401);
+    }
+
+    const same = await bcrypt.compare(newPassword, user.passwordHash);
+    if (same) {
+      throw new AppError("New password must be different", 422);
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    await user.save();
+
+    res.json({ message: "Password changed successfully" });
   } catch (err) {
     next(err);
   }

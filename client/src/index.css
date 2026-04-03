@@ -1,20 +1,269 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg: #f9fafb;
+  --surface: #ffffff;
+  --surface-border: #e5e7eb;
+  --primary: #4f46e5;
+  --secondary: #06b6d4;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --primary-rgb: 79, 70, 229;
+  --secondary-rgb: 6, 182, 212;
+  --gradient: linear-gradient(135deg, #4f46e5, #06b6d4);
+  --focus-ring: rgba(79, 70, 229, 0.26);
+  --soft-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --elevated-shadow: 0 16px 34px -16px rgba(15, 23, 42, 0.28);
+}
+
+.dark {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-border: #334155;
+  --primary: #6366f1;
+  --secondary: #22d3ee;
+  --text-primary: #f9fafb;
+  --text-secondary: #94a3b8;
+  --primary-rgb: 99, 102, 241;
+  --secondary-rgb: 34, 211, 238;
+  --gradient: linear-gradient(135deg, #6366f1, #22d3ee);
+  --focus-ring: rgba(99, 102, 241, 0.3);
+  --soft-shadow: 0 1px 3px rgba(15, 23, 42, 0.3), 0 1px 2px rgba(15, 23, 42, 0.24);
+  --elevated-shadow: 0 16px 42px -18px rgba(2, 6, 23, 0.55);
+}
+
 @layer base {
   html {
-    @apply antialiased text-slate-900 dark:text-slate-100;
+    @apply antialiased;
+    color: var(--text-primary);
+    background: var(--bg);
+    transition: background-color 220ms ease, color 220ms ease;
   }
   body {
-    @apply bg-surface-muted dark:bg-slate-950 min-h-screen;
+    @apply min-h-screen;
+    background: var(--bg);
+    color: var(--text-primary);
+    transition: background-color 220ms ease, color 220ms ease;
   }
   .dark {
     color-scheme: dark;
   }
+
+  a {
+    color: var(--primary);
+    transition: color 180ms ease;
+  }
+
+  a:hover {
+    color: var(--secondary);
+  }
+
+  button,
+  input,
+  textarea,
+  select,
+  [role='button'],
+  [data-theme-surface='true'] {
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease,
+      box-shadow 180ms ease, transform 180ms ease, opacity 180ms ease;
+  }
 }
 
 @layer utilities {
+  .bg-app-bg {
+    background-color: var(--bg);
+  }
+
+  .bg-app-surface {
+    background-color: var(--surface);
+  }
+
+  .border-app {
+    border-color: var(--surface-border);
+  }
+
+  .text-app {
+    color: var(--text-primary);
+  }
+
+  .text-app-muted {
+    color: var(--text-secondary);
+  }
+
+  .bg-app-gradient {
+    background-image: var(--gradient);
+  }
+
+  .bg-app-muted {
+    background-color: color-mix(in srgb, var(--surface) 74%, var(--bg) 26%);
+  }
+
+  .text-app-primary {
+    color: var(--primary);
+  }
+
+  .text-app-secondary {
+    color: var(--secondary);
+  }
+
+  .ring-app-focus {
+    --tw-ring-color: var(--focus-ring);
+  }
+
+  .shadow-app-soft {
+    box-shadow: var(--soft-shadow);
+  }
+
+  .shadow-app-elevated {
+    box-shadow: var(--elevated-shadow);
+  }
+
+  .alert-app {
+    border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--surface-border) 75%);
+    background-color: color-mix(in srgb, var(--primary) 10%, var(--surface) 90%);
+    color: var(--text-primary);
+  }
+
+  .badge-app {
+    background-color: color-mix(in srgb, var(--secondary) 14%, var(--surface) 86%);
+    color: var(--secondary);
+  }
+
+  /* Compatibility layer to keep existing modules aligned with the shared palette. */
+  .text-slate-900,
+  .text-slate-800,
+  .text-slate-700,
+  .dark .dark\:text-slate-100,
+  .dark .dark\:text-white {
+    color: var(--text-primary) !important;
+  }
+
+  .text-slate-600,
+  .text-slate-500,
+  .text-slate-400,
+  .text-amber-900,
+  .text-amber-800,
+  .text-amber-700,
+  .text-emerald-800,
+  .text-emerald-700,
+  .text-rose-800,
+  .text-rose-700,
+  .text-sky-800,
+  .text-brand-600,
+  .text-brand-700,
+  .text-indigo-500,
+  .text-cyan-500,
+  .dark .dark\:text-slate-400,
+  .dark .dark\:text-slate-300,
+  .dark .dark\:text-slate-500,
+  .dark .dark\:text-amber-300,
+  .dark .dark\:text-emerald-300,
+  .dark .dark\:text-rose-300,
+  .dark .dark\:text-brand-400,
+  .dark .dark\:text-brand-300,
+  .dark .dark\:text-indigo-300 {
+    color: var(--text-secondary) !important;
+  }
+
+  .text-emerald-600,
+  .text-sky-600,
+  .text-cyan-600,
+  .text-cyan-500 {
+    color: var(--secondary) !important;
+  }
+
+  .text-rose-600,
+  .text-brand-500,
+  .text-indigo-600,
+  .text-indigo-500 {
+    color: var(--primary) !important;
+  }
+
+  .bg-white,
+  .bg-surface-muted,
+  .bg-slate-50,
+  .bg-slate-100,
+  .bg-amber-50,
+  .bg-rose-50,
+  .bg-emerald-50,
+  .bg-sky-50,
+  .bg-brand-50 {
+    background-color: var(--surface) !important;
+  }
+
+  .bg-slate-200,
+  .bg-slate-200\/70 {
+    background-color: color-mix(in srgb, var(--surface-border) 78%, var(--surface) 22%) !important;
+  }
+
+  .bg-indigo-500\/15,
+  .bg-rose-950\/50,
+  .bg-emerald-100,
+  .bg-cyan-500\/15,
+  .bg-brand-950\/30 {
+    background-color: color-mix(in srgb, var(--primary) 14%, var(--surface) 86%) !important;
+  }
+
+  .bg-brand-600,
+  .bg-brand-500 {
+    background-color: var(--primary) !important;
+  }
+
+  .dark .dark\:bg-slate-900,
+  .dark .dark\:bg-slate-800,
+  .dark .dark\:bg-slate-800\/80,
+  .dark .dark\:bg-slate-950\/40,
+  .dark .dark\:bg-rose-950\/40,
+  .dark .dark\:bg-rose-950\/50 {
+    background-color: var(--surface) !important;
+  }
+
+  .dark .dark\:bg-slate-950 {
+    background-color: var(--bg) !important;
+  }
+
+  .border-surface-border,
+  .border-slate-200,
+  .border-slate-300,
+  .border-rose-200,
+  .border-brand-200,
+  .border-brand-300,
+  .dark .dark\:border-slate-700,
+  .dark .dark\:border-slate-800,
+  .dark .dark\:border-slate-600,
+  .dark .dark\:border-brand-700,
+  .dark .dark\:border-brand-600\/40 {
+    border-color: var(--surface-border) !important;
+  }
+
+  .border-t-brand-600 {
+    border-top-color: var(--primary) !important;
+  }
+
+  .ring-brand-500\/20 {
+    --tw-ring-color: var(--focus-ring) !important;
+  }
+
+  .from-brand-500,
+  .from-brand-600,
+  .from-indigo-600,
+  .from-brand-400 {
+    --tw-gradient-from: var(--primary) var(--tw-gradient-from-position) !important;
+    --tw-gradient-to: rgb(var(--primary-rgb) / 0) var(--tw-gradient-to-position) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+
+  .to-brand-700,
+  .to-cyan-500,
+  .to-brand-500,
+  .to-brand-400 {
+    --tw-gradient-to: var(--secondary) var(--tw-gradient-to-position) !important;
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: theme('colors.slate.300') transparent;

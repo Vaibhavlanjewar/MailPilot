@@ -1,13 +1,13 @@
 import { cn } from '../../utils/cn';
 
 const styles = {
-  completed: 'bg-emerald-50 text-emerald-800 ring-emerald-600/15',
-  sending: 'bg-sky-50 text-sky-800 ring-sky-600/15',
-  scheduled: 'bg-amber-50 text-amber-900 ring-amber-600/15',
-  draft: 'bg-slate-100 text-slate-700 ring-slate-500/10',
-  failed: 'bg-rose-50 text-rose-800 ring-rose-600/15',
-  active: 'bg-emerald-50 text-emerald-800 ring-emerald-600/15',
-  inactive: 'bg-slate-100 text-slate-600 ring-slate-500/10',
+  completed: 'bg-[color:rgba(var(--secondary-rgb),0.12)] text-[var(--secondary)] ring-[color:rgba(var(--secondary-rgb),0.2)]',
+  sending: 'bg-[color:rgba(var(--secondary-rgb),0.12)] text-[var(--secondary)] ring-[color:rgba(var(--secondary-rgb),0.2)]',
+  scheduled: 'bg-[color:rgba(var(--primary-rgb),0.12)] text-[var(--primary)] ring-[color:rgba(var(--primary-rgb),0.2)]',
+  draft: 'bg-[color:var(--surface)] text-app-muted ring-[color:var(--surface-border)]',
+  failed: 'bg-[color:rgba(var(--primary-rgb),0.12)] text-[var(--primary)] ring-[color:rgba(var(--primary-rgb),0.2)]',
+  active: 'bg-[color:rgba(var(--secondary-rgb),0.12)] text-[var(--secondary)] ring-[color:rgba(var(--secondary-rgb),0.2)]',
+  inactive: 'bg-[color:var(--surface)] text-app-muted ring-[color:var(--surface-border)]',
 };
 
 export default function Badge({ children, variant = 'draft', className }) {

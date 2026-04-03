@@ -130,13 +130,13 @@ export default function Dashboard() {
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
               <li className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
-                <LinkButton to="/contacts" variant="ghost" className="!p-0 !shadow-none">
+                <LinkButton to="/app/contacts" variant="ghost" className="!p-0 !shadow-none">
                   Import contacts (CSV)
                 </LinkButton>
               </li>
               <li className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
-                <LinkButton to="/campaigns/new" variant="ghost" className="!p-0 !shadow-none">
+                <LinkButton to="/app/campaigns/new" variant="ghost" className="!p-0 !shadow-none">
                   New campaign
                 </LinkButton>
               </li>
@@ -151,7 +151,7 @@ export default function Dashboard() {
             <h2 className="text-base font-semibold text-slate-900">Recent campaigns</h2>
             <p className="text-sm text-slate-500">Latest from the server.</p>
           </div>
-          <LinkButton to="/campaigns" variant="secondary" size="sm">
+          <LinkButton to="/app/campaigns" variant="secondary" size="sm">
             View all
           </LinkButton>
         </div>

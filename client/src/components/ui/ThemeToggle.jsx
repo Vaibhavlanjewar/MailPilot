@@ -9,7 +9,7 @@ export default function ThemeToggle({ className = '' }) {
       onClick={toggleTheme}
       className={
         className ||
-        'inline-flex h-10 w-10 items-center justify-center rounded-lg border border-surface-border text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+        'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--surface-border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]'
       }
       aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
       title={theme === 'dark' ? 'Light theme' : 'Dark theme'}

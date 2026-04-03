@@ -59,6 +59,14 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
+  const updateUser = useCallback((nextUser) => {
+    setUser((prev) => {
+      const merged = { ...(prev || {}), ...(nextUser || {}) };
+      localStorage.setItem(USER_KEY, JSON.stringify(merged));
+      return merged;
+    });
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -66,9 +74,10 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(getAuthToken() && user),
       login,
       register,
+      updateUser,
       logout,
     }),
-    [user, ready, login, register, logout]
+    [user, ready, login, register, updateUser, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,13 +1,13 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 
 const nav = [
-  { to: '/', label: 'Dashboard', end: true, icon: LayoutIcon },
-  { to: '/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
-  { to: '/contacts', label: 'Contacts', icon: UsersIcon },
-  { to: '/templates', label: 'Templates', icon: DocumentIcon },
-  { to: '/analytics', label: 'Analytics', icon: ChartIcon },
-  { to: '/settings', label: 'Settings', icon: CogIcon },
+  { to: '/app', label: 'Dashboard', end: true, icon: LayoutIcon },
+  { to: '/app/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
+  { to: '/app/contacts', label: 'Contacts', icon: UsersIcon },
+  { to: '/app/templates', label: 'Templates', icon: DocumentIcon },
+  { to: '/app/analytics', label: 'Analytics', icon: ChartIcon },
+  { to: '/app/settings', label: 'Settings', icon: CogIcon },
 ];
 
 export default function Sidebar({ open, onClose }) {
@@ -15,7 +15,7 @@ export default function Sidebar({ open, onClose }) {
     <>
       <div
         className={cn(
-          'fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity dark:bg-black/60 lg:hidden',
+          'fixed inset-0 z-40 bg-[color:rgba(var(--primary-rgb),0.22)] backdrop-blur-sm transition-opacity lg:hidden',
           open ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
         aria-hidden="true"
@@ -23,18 +23,17 @@ export default function Sidebar({ open, onClose }) {
       />
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-surface-border bg-white shadow-elevated transition-transform dark:border-slate-800 dark:bg-slate-900 lg:static lg:translate-x-0 lg:shadow-none',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-app bg-app-surface shadow-elevated transition-transform lg:static lg:translate-x-0 lg:shadow-none',
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex h-16 items-center gap-2 border-b border-surface-border px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-md">
-            M
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">MailPilot</p>
-            <p className="text-xs text-slate-500">Bulk Email</p>
-          </div>
+        <div className="flex h-16 items-center border-b border-surface-border px-5">
+          <Link to="/" className="flex items-center gap-2" onClick={onClose}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-app-gradient text-sm font-bold text-white shadow-app-soft">
+              M
+            </div>
+            <p className="text-sm font-semibold text-app">MailPilot</p>
+          </Link>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3 scrollbar-thin">
           {nav.map((item) => (
@@ -45,10 +44,10 @@ export default function Sidebar({ open, onClose }) {
               onClick={onClose}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
                   isActive
-                    ? 'bg-brand-50 text-brand-800 dark:bg-brand-950/50 dark:text-brand-200'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                    ? 'bg-[color:rgba(var(--primary-rgb),0.12)] text-[var(--primary)]'
+                    : 'text-app-muted hover:bg-app-muted hover:text-app'
                 )
               }
             >
@@ -57,13 +56,18 @@ export default function Sidebar({ open, onClose }) {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-surface-border p-4 dark:border-slate-800">
-          <div className="rounded-lg bg-surface-muted px-3 py-2.5 dark:bg-slate-800/80">
-            <p className="text-xs font-medium text-slate-700 dark:text-slate-200">Pro trial</p>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              12 days left on your plan
+        <div className="border-t border-app p-4">
+          <Link
+            to="/app/pricing"
+            onClick={onClose}
+            className="block rounded-xl bg-app-muted px-3 py-2.5 transition-colors hover:bg-[color:rgba(var(--primary-rgb),0.12)]"
+          >
+            <p className="text-xs font-semibold text-app">Default pack</p>
+            <p className="mt-0.5 text-xs text-app-muted">
+              Free (dev in process) for 2 weeks
             </p>
-          </div>
+            <p className="mt-1 text-[11px] font-medium text-[var(--primary)]">Open pricing</p>
+          </Link>
         </div>
       </aside>
     </>

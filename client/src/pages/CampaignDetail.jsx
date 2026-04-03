@@ -57,7 +57,7 @@ export default function CampaignDetail() {
   if (error) {
     return (
       <div className="space-y-4">
-        <Link to="/campaigns" className="text-sm font-medium text-brand-700 hover:underline">
+        <Link to="/app/campaigns" className="text-sm font-medium text-brand-700 hover:underline">
           Back to campaigns
         </Link>
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-800">
@@ -70,7 +70,7 @@ export default function CampaignDetail() {
   if (!campaign) {
     return (
       <div className="space-y-4">
-        <Link to="/campaigns" className="text-sm font-medium text-brand-700 hover:underline">
+        <Link to="/app/campaigns" className="text-sm font-medium text-brand-700 hover:underline">
           Back to campaigns
         </Link>
         <div className="rounded-xl border border-surface-border bg-white p-6 text-slate-600 shadow-card dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
@@ -84,7 +84,7 @@ export default function CampaignDetail() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
-          <Link to="/campaigns" className="text-sm font-medium text-brand-700 hover:underline">
+          <Link to="/app/campaigns" className="text-sm font-medium text-brand-700 hover:underline">
             Back to campaigns
           </Link>
           <div>

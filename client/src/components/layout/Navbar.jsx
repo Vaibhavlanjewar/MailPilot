@@ -30,22 +30,27 @@ export default function Navbar({ onMenuClick, title }) {
   function handleLogout() {
     setMenuOpen(false);
     logout();
-    navigate('/login');
+    navigate('/');
+  }
+
+  function goToSettingsSection(section) {
+    setMenuOpen(false);
+    navigate(`/app/settings?section=${section}`);
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-surface-border bg-white/80 px-4 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/80 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-app bg-app-surface/90 px-4 backdrop-blur-md sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           onClick={onMenuClick}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-surface-border text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-app text-app-muted hover:bg-app-muted lg:hidden"
           aria-label="Open menu"
         >
           <MenuIcon className="h-5 w-5" />
         </button>
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold text-slate-900 dark:text-white">
+          <h1 className="truncate text-lg font-semibold text-app">
             {title}
           </h1>
         </div>
@@ -57,42 +62,51 @@ export default function Navbar({ onMenuClick, title }) {
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
             className={cn(
-              'flex items-center gap-2 rounded-xl border border-surface-border bg-white py-1.5 pl-2 pr-2.5 shadow-card hover:border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600',
-              menuOpen && 'ring-2 ring-brand-500/20 border-brand-200 dark:border-brand-600/40'
+              'flex items-center gap-2 rounded-xl border border-app bg-app-surface py-1.5 pl-2 pr-2.5 shadow-app-soft',
+              menuOpen && 'ring-2 ring-app-focus border-[color:var(--primary)]'
             )}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-semibold text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-app-gradient text-xs font-semibold text-white shadow-app-soft">
               {initials}
             </div>
             <div className="hidden text-left sm:block">
-              <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+              <p className="text-xs font-semibold text-app">
                 {user?.name?.trim() || 'Account'}
               </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] text-app-muted">
                 {user?.email || ''}
               </p>
             </div>
-            <ChevronIcon className="hidden h-4 w-4 text-slate-400 sm:block dark:text-slate-500" />
+            <ChevronIcon className="hidden h-4 w-4 text-app-muted sm:block" />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-52 origin-top-right rounded-xl border border-surface-border bg-white py-1 shadow-elevated dark:border-slate-700 dark:bg-slate-900">
+            <div className="absolute right-0 mt-2 w-52 origin-top-right rounded-2xl border border-app bg-app-surface py-1 shadow-app-elevated">
               <button
                 type="button"
-                className="flex w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={() => goToSettingsSection('profile')}
+                className="flex w-full px-4 py-2.5 text-left text-sm text-app hover:bg-app-muted"
               >
-                Profile
+                View profile
               </button>
               <button
                 type="button"
-                className="flex w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={() => goToSettingsSection('email')}
+                className="flex w-full px-4 py-2.5 text-left text-sm text-app hover:bg-app-muted"
               >
-                Workspace
+                Change email
               </button>
-              <hr className="my-1 border-surface-border dark:border-slate-700" />
+              <button
+                type="button"
+                onClick={() => goToSettingsSection('password')}
+                className="flex w-full px-4 py-2.5 text-left text-sm text-app hover:bg-app-muted"
+              >
+                Change password
+              </button>
+              <hr className="my-1 border-app" />
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex w-full px-4 py-2.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                className="flex w-full px-4 py-2.5 text-left text-sm font-medium text-[var(--primary)] hover:bg-[color:rgba(var(--primary-rgb),0.12)]"
               >
                 Log out
               </button>

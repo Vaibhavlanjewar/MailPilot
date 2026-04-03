@@ -40,20 +40,18 @@ export async function processEmailJob(job) {
     .select("name email")
     .lean();
 
-  const owner = job.data.owner
-    ? {
-        smtpAppPasswordEnc: "",
-        gmailRefreshTokenEnc: job.data.owner.gmailRefreshTokenEnc || "",
-        email: job.data.owner.email || "",
-        name: "",
-        smtpUser: job.data.owner.smtpUser || "",
-        smtpFromDisplayName: "",
-      }
-    : await User.findById(campaign.userId)
-        .select(
-          "+smtpAppPasswordEnc +gmailRefreshTokenEnc email name smtpUser smtpFromDisplayName",
-        )
-        .lean();
+  const owner = await User.findById(campaign.userId)
+    .select(
+      "+smtpAppPasswordEnc +gmailRefreshTokenEnc email name smtpUser smtpFromDisplayName",
+    )
+    .lean();
+  if (!owner) {
+    await EmailLog.findByIdAndUpdate(emailLogId, {
+      status: "failed",
+      error: "Account missing",
+    });
+    throw new UnrecoverableError("Account missing");
+  }
   const from = resolveCampaignFrom(owner);
   const recipient = contact || { name: "", email: log.toEmail };
   const subject = renderRecipientTemplate(campaign.subject, recipient);

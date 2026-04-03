@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import { logger } from '../utils/logger.js';
 
@@ -22,7 +23,7 @@ export function errorHandler(err, req, res, _next) {
   const status = err.statusCode || 500;
   return res.status(status).json({
     message:
-      process.env.NODE_ENV === 'production'
+      env.nodeEnv === 'production'
         ? 'Internal server error'
         : err.message || 'Internal server error',
   });

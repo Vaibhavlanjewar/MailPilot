@@ -142,7 +142,7 @@ export default function Templates() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-slate-900">Library</h2>
           <Link
-            to="/campaigns/new"
+            to="/app/campaigns/new"
             className="text-sm font-medium text-brand-600 hover:text-brand-700"
           >
             New campaign →
