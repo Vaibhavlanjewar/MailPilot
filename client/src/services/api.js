@@ -40,7 +40,7 @@ api.interceptors.response.use(
       localStorage.removeItem(USER_KEY);
       const path = window.location.pathname;
       if (!path.startsWith('/login') && !path.startsWith('/register')) {
-        window.location.href = '/login';
+        window.location.href = '/';
       }
     }
     const message =
