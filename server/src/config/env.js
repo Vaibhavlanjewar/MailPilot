@@ -11,6 +11,10 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT) || 4000,
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+  backendPublicUrl:
+    process.env.BACKEND_PUBLIC_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    `http://localhost:${Number(process.env.PORT) || 4000}`,
   mongodbUri: process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/mailpilot",
   redis: {
     host: process.env.REDIS_HOST || "127.0.0.1",

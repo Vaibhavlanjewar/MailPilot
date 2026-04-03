@@ -11,6 +11,7 @@ import { cn } from '../../utils/cn';
  *   emptyMessage?: string,
  *   className?: string,
  *   loading?: boolean,
+ *   getRowClassName?: (row: object, rowIndex: number) => string,
  * }} props
  */
 export default function DataTable({
@@ -19,6 +20,7 @@ export default function DataTable({
   emptyMessage = 'No data yet.',
   className,
   loading,
+  getRowClassName,
 }) {
   return (
     <div
@@ -70,7 +72,10 @@ export default function DataTable({
               rows.map((row, idx) => (
                 <tr
                   key={row.id ?? idx}
-                  className="transition-colors hover:bg-app-muted"
+                  className={cn(
+                    'transition-colors hover:bg-app-muted',
+                    getRowClassName ? getRowClassName(row, idx) : ''
+                  )}
                 >
                   {columns.map((col) => (
                     <td

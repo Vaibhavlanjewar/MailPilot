@@ -9,6 +9,7 @@ const nav = [
   { to: '/app/contacts', label: 'Contacts', icon: UsersIcon },
   { to: '/app/templates', label: 'Templates', icon: DocumentIcon },
   { to: '/app/analytics', label: 'Analytics', icon: ChartIcon },
+  { to: '/app/email-tracking', label: 'Email Tracking', icon: TrackingIcon },
   { to: '/app/settings', label: 'Settings', icon: CogIcon },
   { to: '/app/how-to-use', label: 'How To Use', icon: GuideIcon },
 ];
@@ -124,6 +125,15 @@ function ChartIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+    </svg>
+  );
+}
+
+function TrackingIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l3.75 2.25" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
 }

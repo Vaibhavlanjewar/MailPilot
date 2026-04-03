@@ -9,6 +9,7 @@ import CampaignDetail from './pages/CampaignDetail';
 import Contacts from './pages/Contacts';
 import Templates from './pages/Templates';
 import Analytics from './pages/Analytics';
+import EmailTracking from './pages/EmailTracking';
 import Settings from './pages/Settings';
 import HowToUse from './pages/HowToUse';
 import Pricing from './pages/Pricing';
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="contacts" element={<Contacts />} />
           <Route path="templates" element={<Templates />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="email-tracking" element={<EmailTracking />} />
           <Route path="settings" element={<Settings />} />
           <Route path="how-to-use" element={<HowToUse />} />
           <Route path="pricing" element={<Pricing />} />

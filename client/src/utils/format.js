@@ -16,6 +16,19 @@ export function formatDate(iso) {
   }).format(d);
 }
 
+export function formatDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return new Intl.DateTimeFormat(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
+}
+
 export function statusLabel(status) {
   const map = {
     completed: 'Completed',
