@@ -167,7 +167,7 @@ export default function Templates() {
             description={
               editingId
                 ? 'Update name, subject, or HTML body. Preview shows how recipients will see it.'
-                : 'Subject and body are used when you choose this template while creating a campaign.'
+                : 'Subject and body are used when you choose this template while creating a campaign. Use {{name}}, {{first_name}}, or {{email}} for personalization.'
             }
           />
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import multer from 'multer';
 import { authenticate } from '../middlewares/auth.js';
 import { validateRequest } from '../middlewares/validateRequest.js';
@@ -15,6 +15,15 @@ router.post(
   body('contacts').isArray({ min: 1 }).withMessage('contacts array required'),
   validateRequest,
   contactController.bulkContacts
+);
+
+router.patch(
+  '/:id/subscription',
+  authenticate,
+  param('id').isMongoId().withMessage('invalid contact id'),
+  body('subscribed').isBoolean().withMessage('subscribed must be boolean'),
+  validateRequest,
+  contactController.updateContactSubscription,
 );
 
 const upload = multer({

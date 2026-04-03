@@ -10,6 +10,7 @@ export default function Contacts() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [toggleBusyId, setToggleBusyId] = useState('');
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
@@ -41,7 +42,41 @@ export default function Contacts() {
         </Badge>
       ),
     },
+    {
+      key: 'actions',
+      header: 'Action',
+      render: (row) => (
+        <Button
+          type="button"
+          variant={row.subscribed ? 'secondary' : 'primary'}
+          size="sm"
+          disabled={toggleBusyId === row.id}
+          onClick={() => void handleToggleSubscription(row)}
+        >
+          {toggleBusyId === row.id
+            ? 'Saving…'
+            : row.subscribed
+              ? 'Disable'
+              : 'Enable'}
+        </Button>
+      ),
+    },
   ];
+
+  async function handleToggleSubscription(row) {
+    setToggleBusyId(row.id);
+    setError(null);
+    try {
+      await api.patch(`/contacts/${row.id}/subscription`, {
+        subscribed: !row.subscribed,
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setToggleBusyId('');
+    }
+  }
 
   async function handleFile(e) {
     const file = e.target.files?.[0];

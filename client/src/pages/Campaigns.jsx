@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import DataTable from '../components/ui/DataTable';
 import { LinkButton } from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
@@ -30,7 +31,18 @@ export default function Campaigns() {
   }, [load]);
 
   const columns = [
-    { key: 'name', header: 'Name' },
+    {
+      key: 'name',
+      header: 'Name',
+      render: (row) => (
+        <Link
+          to={`/campaigns/${row.id}`}
+          className="font-medium text-brand-700 hover:underline dark:text-brand-300"
+        >
+          {row.name}
+        </Link>
+      ),
+    },
     {
       key: 'status',
       header: 'Status',

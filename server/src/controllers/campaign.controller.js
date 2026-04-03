@@ -21,9 +21,10 @@ export async function createCampaign(req, res, next) {
       const count = await Contact.countDocuments({
         _id: { $in: contactIds },
         userId: req.userId,
+        subscribed: { $ne: false },
       });
       if (count !== contactIds.length) {
-        throw new AppError('One or more contacts are invalid', 400);
+        throw new AppError('One or more contacts are invalid or disabled', 400);
       }
       recipientContactIds = contactIds;
     }
@@ -94,14 +95,50 @@ export async function getCampaignStatus(req, res, next) {
     }
 
     const logs = await EmailLog.find({ campaignId: campaign._id })
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .select('toEmail status error attempts updatedAt')
+      .sort({ createdAt: 1 })
+      .select('contactId toEmail status error attempts lastAttemptAt providerMessageId createdAt updatedAt')
       .lean();
+
+    const contactIds = logs
+      .map((log) => log.contactId)
+      .filter(Boolean);
+    const contacts = contactIds.length
+      ? await Contact.find({
+          _id: { $in: contactIds },
+          userId: req.userId,
+        })
+          .select('name email')
+          .lean()
+      : [];
+
+    const contactMap = new Map(
+      contacts.map((contact) => [String(contact._id), contact]),
+    );
+
+    const recipients = logs.map((log) => {
+      const contact = log.contactId ? contactMap.get(String(log.contactId)) : null;
+      return {
+        ...log,
+        name: contact?.name || '',
+        email: contact?.email || log.toEmail,
+      };
+    });
+
+    const summary = recipients.reduce(
+      (acc, recipient) => {
+        acc.total += 1;
+        if (recipient.status === 'sent') acc.sent += 1;
+        else if (recipient.status === 'failed') acc.failed += 1;
+        else acc.queued += 1;
+        return acc;
+      },
+      { total: 0, sent: 0, failed: 0, queued: 0 },
+    );
 
     res.json({
       campaign,
-      recentLogs: logs,
+      summary,
+      recipients,
     });
   } catch (err) {
     next(err);

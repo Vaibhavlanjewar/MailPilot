@@ -33,7 +33,7 @@ export async function bulkContacts(req, res, next) {
       updateOne: {
         filter: { userId, email: row.email },
         update: {
-          $set: { name: row.name || '' },
+          ...(row.name ? { $set: { name: row.name } } : {}),
           $setOnInsert: { userId, email: row.email },
         },
         upsert: true,
@@ -72,8 +72,38 @@ export async function listContacts(req, res, next) {
         id: c._id.toString(),
         email: c.email,
         name: c.name || '',
-        subscribed: true,
+        subscribed: c.subscribed !== false,
       })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateContactSubscription(req, res, next) {
+  try {
+    const { subscribed } = req.body;
+    if (typeof subscribed !== 'boolean') {
+      throw new AppError('subscribed must be a boolean', 422);
+    }
+
+    const contact = await Contact.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { $set: { subscribed } },
+      { new: true },
+    ).lean();
+
+    if (!contact) {
+      throw new AppError('Contact not found', 404);
+    }
+
+    res.json({
+      contact: {
+        id: contact._id.toString(),
+        email: contact.email,
+        name: contact.name || '',
+        subscribed: contact.subscribed !== false,
+      },
     });
   } catch (err) {
     next(err);
@@ -93,7 +123,7 @@ export async function uploadContacts(req, res, next) {
       updateOne: {
         filter: { userId, email: row.email },
         update: {
-          $set: { name: row.name || '' },
+          ...(row.name ? { $set: { name: row.name } } : {}),
           $setOnInsert: { userId, email: row.email },
         },
         upsert: true,

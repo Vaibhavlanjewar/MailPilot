@@ -1,11 +1,13 @@
 import { UnrecoverableError } from "bullmq";
 import { Campaign } from "../models/Campaign.js";
+import { Contact } from "../models/Contact.js";
 import { EmailLog } from "../models/EmailLog.js";
 import { User } from "../models/User.js";
 import { sendCampaignMail } from "../services/email/campaignSend.js";
 import { maybeFinishCampaign } from "../services/campaign.queue.service.js";
 import { resolveCampaignFrom } from "../utils/mailFrom.js";
 import { formatEmailSendErrorForLog } from "../utils/smtpErrors.js";
+import { renderRecipientTemplate } from "../utils/templateRenderer.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -34,19 +36,36 @@ export async function processEmailJob(job) {
     throw new UnrecoverableError("Campaign missing");
   }
 
-  const owner = await User.findById(campaign.userId)
-    .select(
-      "+smtpAppPasswordEnc +gmailRefreshTokenEnc email name smtpUser smtpFromDisplayName",
-    )
+  const contact = await Contact.findById(log.contactId)
+    .select("name email")
     .lean();
+
+  const owner = job.data.owner
+    ? {
+        smtpAppPasswordEnc: "",
+        gmailRefreshTokenEnc: job.data.owner.gmailRefreshTokenEnc || "",
+        email: job.data.owner.email || "",
+        name: "",
+        smtpUser: job.data.owner.smtpUser || "",
+        smtpFromDisplayName: "",
+      }
+    : await User.findById(campaign.userId)
+        .select(
+          "+smtpAppPasswordEnc +gmailRefreshTokenEnc email name smtpUser smtpFromDisplayName",
+        )
+        .lean();
   const from = resolveCampaignFrom(owner);
+  const recipient = contact || { name: "", email: log.toEmail };
+  const subject = renderRecipientTemplate(campaign.subject, recipient);
+  const html = renderRecipientTemplate(campaign.content, recipient);
+  const text = renderRecipientTemplate(campaign.textContent || "", recipient) || undefined;
 
   try {
     const result = await sendCampaignMail(owner, {
       to: log.toEmail,
-      subject: campaign.subject,
-      html: campaign.content,
-      text: campaign.textContent || undefined,
+      subject,
+      html,
+      text,
       from,
     });
 

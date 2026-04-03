@@ -37,6 +37,7 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
     throw new AppError("Campaign not found", 404);
   }
 
+  let ownerSnapshot = null;
   if (env.email.provider === "gmail-api") {
     const owner = await User.findById(userId)
       .select("+gmailRefreshTokenEnc email smtpUser")
@@ -45,6 +46,12 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
     if (!authStatus.ok) {
       throw new AppError(authStatus.reason, 422);
     }
+
+    ownerSnapshot = {
+      gmailRefreshTokenEnc: owner?.gmailRefreshTokenEnc || "",
+      email: owner?.email || "",
+      smtpUser: owner?.smtpUser || "",
+    };
   }
 
   if (campaign.status === "processing" || campaign.status === "completed") {
@@ -54,7 +61,7 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
     );
   }
 
-  let contactFilter = { userId };
+  let contactFilter = { userId, subscribed: { $ne: false } };
   if (campaign.recipientContactIds?.length) {
     contactFilter._id = { $in: campaign.recipientContactIds };
   }
@@ -148,7 +155,10 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
   await queue.addBulk(
     emailLogIds.map((logId, index) => ({
       name: "send-email",
-      data: { emailLogId: logId.toString() },
+      data: {
+        emailLogId: logId.toString(),
+        owner: ownerSnapshot,
+      },
       opts: {
         jobId: logId.toString(),
         delay: delayMs + computeRecipientDelayMs(index),
