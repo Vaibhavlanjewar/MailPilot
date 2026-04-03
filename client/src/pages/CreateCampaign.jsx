@@ -25,7 +25,11 @@ const initialForm = {
   scheduleAt: '',
 };
 
-const emptyManualClient = () => ({ name: '', email: '' });
+const emptyManualClient = () => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  name: '',
+  email: '',
+});
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function normalizeEmail(value) {
@@ -482,7 +486,7 @@ export default function CreateCampaign() {
                       <p className="text-sm text-slate-500">No manual clients yet. Add one to continue.</p>
                     )}
                     {manualClients.map((client, index) => (
-                      <div key={`${index}-${client.email}`} className="rounded-xl border border-surface-border p-3 dark:border-slate-700">
+                      <div key={client.id} className="rounded-xl border border-surface-border p-3 dark:border-slate-700">
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div>
                             <Label htmlFor={`client-name-${index}`}>Name</Label>

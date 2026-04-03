@@ -10,6 +10,7 @@ import campaignRoutes from "./routes/campaign.routes.js";
 import contactRoutes from "./routes/contact.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import analyticsRoutes from "./routes/analytics.routes.js";
 import templateRoutes from "./routes/template.routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
@@ -161,6 +162,7 @@ app.get("/api/health", (req, res) => {
 // ✅ Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/analytics", analyticsRoutes);
 app.use("/api/campaign", campaignRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/templates", templateRoutes);

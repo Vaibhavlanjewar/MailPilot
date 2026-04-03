@@ -1,11 +1,53 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import DataTable from "../components/ui/DataTable";
 import Card, { CardHeader } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Input, { Label } from "../components/ui/Input";
-import Badge from "../components/ui/Badge";
 import { PageLoader } from "../components/ui/LoadingSpinner";
 import { api } from "../services/api";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function normalizeName(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function StatusBadge({ subscribed }) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium",
+        subscribed
+          ? "bg-cyan-500/20 text-cyan-300"
+          : "bg-[#475569] text-slate-200",
+      ].join(" ")}
+    >
+      {subscribed ? "Subscribed" : "Unsubscribed"}
+    </span>
+  );
+}
+
+function SubscriptionActionButton({ subscribed, busy, disabled, onClick }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        "inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-semibold",
+        "transition-all duration-150 disabled:pointer-events-none disabled:opacity-50",
+        subscribed
+          ? "border border-[#6366f1] bg-transparent text-indigo-300 hover:bg-[#6366f1] hover:text-white"
+          : "bg-gradient-to-r from-[#6366f1] to-[#06b6d4] text-white shadow-[0_0_20px_rgba(6,182,212,0.28)] hover:brightness-110",
+      ].join(" ")}
+    >
+      {busy ? "Saving..." : subscribed ? "Disable" : "Enable"}
+    </button>
+  );
+}
 
 export default function Contacts() {
   const [rows, setRows] = useState([]);
@@ -31,6 +73,14 @@ export default function Contacts() {
   }, [rows, searchTerm]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const existingEmailSet = useMemo(
+    () => new Set(rows.map((row) => normalizeEmail(row.email)).filter(Boolean)),
+    [rows],
+  );
+  const existingNameSet = useMemo(
+    () => new Set(rows.map((row) => normalizeName(row.name)).filter(Boolean)),
+    [rows],
+  );
   const allVisibleSelected =
     filteredRows.length > 0 &&
     filteredRows.every((row) => selectedSet.has(row.id));
@@ -58,79 +108,6 @@ export default function Contacts() {
       prev.filter((id) => rows.some((row) => row.id === id)),
     );
   }, [rows]);
-
-  const columns = [
-    {
-      key: "select",
-      header: (
-        <input
-          type="checkbox"
-          aria-label="Select all contacts"
-          checked={allVisibleSelected}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedIds((prev) => {
-                const next = new Set(prev);
-                filteredRows.forEach((row) => next.add(row.id));
-                return Array.from(next);
-              });
-              return;
-            }
-            setSelectedIds((prev) =>
-              prev.filter((id) => !filteredRows.some((row) => row.id === id)),
-            );
-          }}
-          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-        />
-      ),
-      className: "w-12",
-      render: (row) => (
-        <input
-          type="checkbox"
-          aria-label={`Select ${row.email}`}
-          checked={selectedSet.has(row.id)}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedIds((prev) => [...prev, row.id]);
-              return;
-            }
-            setSelectedIds((prev) => prev.filter((id) => id !== row.id));
-          }}
-          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-        />
-      ),
-    },
-    { key: "name", header: "Name" },
-    { key: "email", header: "Email" },
-    {
-      key: "subscribed",
-      header: "Status",
-      render: (row) => (
-        <Badge variant={row.subscribed ? "active" : "inactive"}>
-          {row.subscribed ? "Subscribed" : "Unsubscribed"}
-        </Badge>
-      ),
-    },
-    {
-      key: "actions",
-      header: "Action",
-      render: (row) => (
-        <Button
-          type="button"
-          variant={row.subscribed ? "secondary" : "primary"}
-          size="sm"
-          disabled={toggleBusyId === row.id || bulkBusy}
-          onClick={() => void handleToggleSubscription(row)}
-        >
-          {toggleBusyId === row.id
-            ? "Saving…"
-            : row.subscribed
-              ? "Disable"
-              : "Enable"}
-        </Button>
-      ),
-    },
-  ];
 
   async function handleToggleSubscription(row) {
     setToggleBusyId(row.id);
@@ -187,11 +164,80 @@ export default function Contacts() {
   }
 
   async function handleCreateContacts() {
-    setCreateBusy(true);
     setError(null);
+    const duplicateExistingEmails = new Set();
+    const duplicateExistingNames = new Set();
+    const duplicateDraftEmails = new Set();
+    const duplicateDraftNames = new Set();
+    const invalidEmails = [];
+    const seenDraftEmails = new Set();
+    const seenDraftNames = new Set();
+
+    for (const row of draftContacts) {
+      const email = normalizeEmail(row.email);
+      const name = normalizeName(row.name);
+
+      if (!email || !EMAIL_RE.test(email)) {
+        if (email) invalidEmails.push(row.email);
+        continue;
+      }
+
+      if (existingEmailSet.has(email)) {
+        duplicateExistingEmails.add(email);
+      }
+      if (seenDraftEmails.has(email)) {
+        duplicateDraftEmails.add(email);
+      }
+      seenDraftEmails.add(email);
+
+      if (name) {
+        if (existingNameSet.has(name)) {
+          duplicateExistingNames.add(name);
+        }
+        if (seenDraftNames.has(name)) {
+          duplicateDraftNames.add(name);
+        }
+        seenDraftNames.add(name);
+      }
+    }
+
+    const errorLines = [];
+    if (duplicateExistingNames.size) {
+      errorLines.push(
+        `Name already present in client list: ${Array.from(duplicateExistingNames).join(", ")}`,
+      );
+    }
+    if (duplicateExistingEmails.size) {
+      errorLines.push(
+        `Email already present in client list: ${Array.from(duplicateExistingEmails).join(", ")}`,
+      );
+    }
+    if (duplicateDraftNames.size) {
+      errorLines.push(
+        `Duplicate names in added clients: ${Array.from(duplicateDraftNames).join(", ")}`,
+      );
+    }
+    if (duplicateDraftEmails.size) {
+      errorLines.push(
+        `Duplicate emails in added clients: ${Array.from(duplicateDraftEmails).join(", ")}`,
+      );
+    }
+    if (invalidEmails.length) {
+      errorLines.push("One or more client emails are invalid.");
+    }
+
+    if (errorLines.length) {
+      setError(new Error(errorLines.join(". ")));
+      return;
+    }
+
+    setCreateBusy(true);
     try {
       await api.post("/contacts/bulk", {
-        contacts: draftContacts,
+        contacts: draftContacts.map((row) => ({
+          name: typeof row.name === "string" ? row.name.trim() : "",
+          email: typeof row.email === "string" ? row.email.trim() : "",
+        })),
       });
       await load();
       setDraftContacts([{ name: "", email: "" }]);
@@ -370,14 +416,6 @@ export default function Contacts() {
 
       <div>
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              All contacts
-            </h2>
-            <p className="text-sm text-slate-500">
-              {filteredRows.length} shown / {rows.length} total
-            </p>
-          </div>
           <div className="w-full sm:w-72">
             <Label htmlFor="contact-search" className="mb-1">
               Search
@@ -390,47 +428,151 @@ export default function Contacts() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-slate-500">
+              {selectedCount
+                ? `${selectedCount} selected`
+                : "No contacts selected"}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!selectedCount || bulkBusy}
+              onClick={() => void handleBulkSubscription(true)}
+            >
+              {bulkBusy ? "Working…" : "Bulk Enable"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!selectedCount || bulkBusy}
+              onClick={() => void handleBulkSubscription(false)}
+            >
+              {bulkBusy ? "Working…" : "Bulk Disable"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={!selectedCount || bulkBusy}
+              onClick={() => setSelectedIds([])}
+            >
+              Clear
+            </Button>
+          </div>
         </div>
-        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
-          <p className="text-sm text-slate-500">
-            {selectedCount
-              ? `${selectedCount} selected`
-              : "No contacts selected"}
-          </p>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={!selectedCount || bulkBusy}
-            onClick={() => void handleBulkSubscription(true)}
-          >
-            {bulkBusy ? "Working…" : "Bulk Enable"}
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={!selectedCount || bulkBusy}
-            onClick={() => void handleBulkSubscription(false)}
-          >
-            {bulkBusy ? "Working…" : "Bulk Disable"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={!selectedCount || bulkBusy}
-            onClick={() => setSelectedIds([])}
-          >
-            Clear
-          </Button>
+        <div className="overflow-hidden rounded-t-2xl border border-[#334155] bg-[#0f172a] shadow-[0_18px_40px_-24px_rgba(15,23,42,0.9)] font-sans">
+          <div className="max-h-[560px] overflow-auto">
+            <table className="min-w-full text-left text-sm text-[#e2e8f0]">
+              <thead className="sticky top-0 z-10 bg-[#e5e7eb] text-[#1e293b]">
+                <tr>
+                  <th className="w-14 px-6 py-4 font-semibold">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all contacts"
+                      checked={allVisibleSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            filteredRows.forEach((row) => next.add(row.id));
+                            return Array.from(next);
+                          });
+                          return;
+                        }
+                        setSelectedIds((prev) =>
+                          prev.filter((id) => !filteredRows.some((row) => row.id === id)),
+                        );
+                      }}
+                      className="h-4 w-4 rounded border-[#64748b] bg-transparent text-[#6366f1] focus:ring-[#6366f1]"
+                    />
+                  </th>
+                  <th className="px-6 py-4 font-semibold">Name</th>
+                  <th className="px-6 py-4 font-semibold">Email</th>
+                  <th className="px-6 py-4 font-semibold">Status</th>
+                  <th className="px-6 py-4 font-semibold">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && rows.length > 0 &&
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <tr key={`skeleton-${i}`} className="border-t border-[#334155] bg-[#1e293b]">
+                      <td className="px-6 py-4">
+                        <div className="h-4 w-4 animate-pulse rounded bg-[#334155]" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="h-4 w-28 animate-pulse rounded bg-[#334155]" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="h-4 w-44 animate-pulse rounded bg-[#334155]" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="h-6 w-24 animate-pulse rounded-full bg-[#334155]" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="h-8 w-20 animate-pulse rounded-full bg-[#334155]" />
+                      </td>
+                    </tr>
+                  ))}
+
+                {!loading && filteredRows.length === 0 && (
+                  <tr className="border-t border-[#334155] bg-[#1e293b]">
+                    <td className="px-6 py-10 text-center text-[#cbd5f5]" colSpan={5}>
+                      No contacts yet. Upload a CSV or add them when creating a campaign.
+                    </td>
+                  </tr>
+                )}
+
+                {!loading &&
+                  filteredRows.map((row) => {
+                    const selected = selectedSet.has(row.id);
+                    return (
+                      <tr
+                        key={row.id}
+                        className={[
+                          "border-t border-[#334155] bg-[#1e293b] transition-colors duration-150",
+                          selected ? "bg-[#273449]" : "hover:bg-[#273449]",
+                        ].join(" ")}
+                      >
+                        <td className="px-6 py-4">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${row.email}`}
+                            checked={selected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedIds((prev) => [...prev, row.id]);
+                                return;
+                              }
+                              setSelectedIds((prev) => prev.filter((id) => id !== row.id));
+                            }}
+                            className="h-4 w-4 rounded border-[#64748b] bg-transparent text-[#6366f1] focus:ring-[#6366f1]"
+                          />
+                        </td>
+                        <td className="px-6 py-4 font-medium text-[#e2e8f0]">
+                          {row.name || "Unnamed contact"}
+                        </td>
+                        <td className="px-6 py-4 text-[#cbd5f5]">{row.email}</td>
+                        <td className="px-6 py-4">
+                          <StatusBadge subscribed={row.subscribed} />
+                        </td>
+                        <td className="px-6 py-4">
+                          <SubscriptionActionButton
+                            subscribed={row.subscribed}
+                            busy={toggleBusyId === row.id}
+                            disabled={toggleBusyId === row.id || bulkBusy}
+                            onClick={() => void handleToggleSubscription(row)}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <DataTable
-          columns={columns}
-          rows={filteredRows}
-          loading={loading && rows.length > 0}
-          emptyMessage="No contacts yet. Upload a CSV or add them when creating a campaign."
-        />
       </div>
     </div>
   );

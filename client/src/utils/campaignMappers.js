@@ -32,6 +32,7 @@ export function mapCampaignToTableRow(c) {
     status: variant,
     statusLabel: label,
     sent: c.stats?.sent ?? 0,
+    total: c.stats?.total ?? 0,
     date: typeof date === 'string' ? date : date?.toISOString?.() || '',
   };
 }

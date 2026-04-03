@@ -13,20 +13,92 @@ export async function bulkContacts(req, res, next) {
     }
 
     const userId = new mongoose.Types.ObjectId(req.userId);
-    const seen = new Set();
+    const seenEmails = new Set();
+    const seenNames = new Set();
+    const duplicatePayloadEmails = new Set();
+    const duplicatePayloadNames = new Set();
     const normalized = [];
 
     for (const c of contacts) {
       const raw =
         typeof c?.email === 'string' ? c.email.trim().toLowerCase() : '';
-      if (!raw || !validator.isEmail(raw) || seen.has(raw)) continue;
-      seen.add(raw);
+      if (!raw || !validator.isEmail(raw)) continue;
+
+      if (seenEmails.has(raw)) {
+        duplicatePayloadEmails.add(raw);
+        continue;
+      }
+      seenEmails.add(raw);
+
       const name = typeof c?.name === 'string' ? c.name.trim() : '';
+
+      if (name) {
+        const normalizedName = name.toLowerCase();
+        if (seenNames.has(normalizedName)) {
+          duplicatePayloadNames.add(name);
+          continue;
+        }
+        seenNames.add(normalizedName);
+      }
+
       normalized.push({ email: raw, name });
     }
 
     if (!normalized.length) {
       throw new AppError('No valid email addresses in contacts', 400);
+    }
+
+    if (duplicatePayloadEmails.size || duplicatePayloadNames.size) {
+      const parts = [];
+      if (duplicatePayloadNames.size) {
+        parts.push(`Duplicate names in request: ${Array.from(duplicatePayloadNames).join(', ')}`);
+      }
+      if (duplicatePayloadEmails.size) {
+        parts.push(`Duplicate emails in request: ${Array.from(duplicatePayloadEmails).join(', ')}`);
+      }
+      throw new AppError(parts.join('. '), 409);
+    }
+
+    const normalizedEmails = normalized.map((row) => row.email);
+    const normalizedNames = normalized
+      .map((row) => (typeof row.name === 'string' ? row.name.trim().toLowerCase() : ''))
+      .filter(Boolean);
+
+    const existingByEmail = await Contact.find({
+      userId,
+      email: { $in: normalizedEmails },
+    })
+      .select('email')
+      .lean();
+
+    const existingByName = normalizedNames.length
+      ? await Contact.find({
+          userId,
+          name: { $exists: true, $ne: '' },
+        })
+          .select('name')
+          .lean()
+      : [];
+
+    const existingEmailSet = new Set(
+      existingByEmail.map((row) => String(row.email || '').trim().toLowerCase()).filter(Boolean),
+    );
+    const existingNameSet = new Set(
+      existingByName.map((row) => String(row.name || '').trim().toLowerCase()).filter(Boolean),
+    );
+
+    const duplicateExistingEmails = normalizedEmails.filter((email) => existingEmailSet.has(email));
+    const duplicateExistingNames = normalizedNames.filter((name) => existingNameSet.has(name));
+
+    if (duplicateExistingEmails.length || duplicateExistingNames.length) {
+      const parts = [];
+      if (duplicateExistingNames.length) {
+        parts.push(`Name already present in client list: ${Array.from(new Set(duplicateExistingNames)).join(', ')}`);
+      }
+      if (duplicateExistingEmails.length) {
+        parts.push(`Email already present in client list: ${Array.from(new Set(duplicateExistingEmails)).join(', ')}`);
+      }
+      throw new AppError(parts.join('. '), 409);
     }
 
     const ops = normalized.map((row) => ({

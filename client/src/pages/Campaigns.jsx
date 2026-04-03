@@ -54,7 +54,7 @@ export default function Campaigns() {
       key: 'sent',
       header: 'Sent',
       className: 'tabular-nums',
-      render: (row) => row.sent,
+      render: (row) => `${row.sent}/${row.total}`,
     },
     {
       key: 'date',
