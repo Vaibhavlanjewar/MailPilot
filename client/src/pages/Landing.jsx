@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import ThemeToggle from "../components/ui/ThemeToggle";
 import { useAuth } from "../context/AuthContext";
 
@@ -53,6 +54,32 @@ const upcomingFeatures = [
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
+  const velocityRef = useRef(null);
+  const [velocityAnimCycle, setVelocityAnimCycle] = useState(0);
+
+  useEffect(() => {
+    const node = velocityRef.current;
+    if (!node) return;
+
+    let wasVisible = false;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !wasVisible) {
+          setVelocityAnimCycle((n) => n + 1);
+          wasVisible = true;
+        }
+        if (!entry.isIntersecting) {
+          wasVisible = false;
+        }
+      },
+      {
+        threshold: 0.35,
+      },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-[var(--bg)] text-[var(--text-primary)]">
@@ -138,7 +165,10 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-[color:var(--surface-border)] bg-[var(--surface)] p-5 shadow-app-elevated sm:p-6">
+          <div
+            ref={velocityRef}
+            className="animate-velocity-card rounded-2xl border border-[color:var(--surface-border)] bg-[var(--surface)] p-5 shadow-app-elevated sm:p-6"
+          >
             <div className="mb-4 flex items-center justify-between">
               <p className="text-sm font-semibold">Campaign Velocity</p>
               <p className="rounded-full bg-[color:rgba(var(--secondary-rgb),0.14)] px-3 py-1 text-xs font-semibold text-[var(--secondary)]">
@@ -147,15 +177,15 @@ export default function Landing() {
             </div>
             <div className="space-y-3">
               {[78, 64, 92, 70, 88].map((v, i) => (
-                <div key={i}>
+                <div key={`${velocityAnimCycle}-${i}`} className="animate-velocity-row" style={{ animationDelay: `${i * 90}ms` }}>
                   <div className="mb-1 flex items-center justify-between text-xs text-[var(--text-secondary)]">
                     <span>Week {i + 1}</span>
                     <span>{v}%</span>
                   </div>
                   <div className="h-2 rounded-full bg-[color:var(--surface-border)]/70">
                     <div
-                      className="h-2 rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)]"
-                      style={{ width: `${v}%` }}
+                      className="animate-velocity-bar h-2 rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)]"
+                      style={{ width: `${v}%`, animationDelay: `${200 + i * 120}ms` }}
                     />
                   </div>
                 </div>
@@ -229,7 +259,7 @@ export default function Landing() {
             {testimonials.map((item) => (
               <blockquote
                 key={item.name}
-                className="rounded-2xl border border-[color:var(--surface-border)] bg-[var(--surface)] p-6 shadow-app-soft"
+                className="rounded-2xl border border-[color:var(--surface-border)] bg-[var(--surface)] p-6 shadow-app-soft transition hover:-translate-y-0.5 hover:shadow-app-elevated"
               >
                 <p className="text-base leading-relaxed">{item.quote}</p>
                 <footer className="mt-5 text-sm text-[var(--text-secondary)]">
