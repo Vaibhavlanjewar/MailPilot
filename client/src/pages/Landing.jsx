@@ -52,6 +52,8 @@ const upcomingFeatures = [
   },
 ];
 
+const googleFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSff_YjvIVpgc6umn0zl3mihp7dvTYztqREbj_HElb70wCpXaw/viewform?usp=publish-editor';
+
 export default function Landing() {
   const { isAuthenticated } = useAuth();
   const velocityRef = useRef(null);
@@ -117,6 +119,14 @@ export default function Landing() {
               className="transition-colors hover:text-[var(--text-primary)]"
             >
               Testimonials
+            </a>
+            <a
+              href={googleFormUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="transition-colors hover:text-[var(--text-primary)]"
+            >
+              Feedback
             </a>
           </nav>
 

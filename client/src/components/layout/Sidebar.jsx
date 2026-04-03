@@ -1,6 +1,8 @@
 import { Link, NavLink } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 
+const googleFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSff_YjvIVpgc6umn0zl3mihp7dvTYztqREbj_HElb70wCpXaw/viewform?usp=publish-editor';
+
 const nav = [
   { to: '/app', label: 'Dashboard', end: true, icon: LayoutIcon },
   { to: '/app/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
@@ -56,6 +58,16 @@ export default function Sidebar({ open, onClose }) {
               {item.label}
             </NavLink>
           ))}
+          <a
+            href={googleFormUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            onClick={onClose}
+            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-app-muted transition-all duration-200 hover:bg-app-muted hover:text-app"
+          >
+            <FeedbackIcon className="h-5 w-5 shrink-0 opacity-80" />
+            Feedback
+          </a>
         </nav>
         <div className="border-t border-app p-4">
           <Link
@@ -131,6 +143,14 @@ function GuideIcon({ className }) {
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 01.75-.75h6a.75.75 0 01.75.75v10.5a.75.75 0 01-.75.75h-6A.75.75 0 0112 17.25V6.75z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 00-.75-.75h-6a.75.75 0 00-.75.75v10.5a.75.75 0 00.75.75h6a.75.75 0 00.75-.75" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9h1.5m-1.5 3h1.5m4.5-3h1.5m-1.5 3h1.5" />
+    </svg>
+  );
+}
+
+function FeedbackIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3h6m-9.75 8.25L5.1 15.9a2.25 2.25 0 011.591-.659h10.56A2.25 2.25 0 0019.5 13V6.75A2.25 2.25 0 0017.25 4.5H6.75A2.25 2.25 0 004.5 6.75v10.5A2.25 2.25 0 006.75 19.5z" />
     </svg>
   );
 }
