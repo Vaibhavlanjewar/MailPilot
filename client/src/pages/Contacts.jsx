@@ -468,7 +468,7 @@ export default function Contacts() {
             <table className="min-w-full text-left text-sm text-[#e2e8f0]">
               <thead className="sticky top-0 z-10 bg-[#e5e7eb] text-[#1e293b]">
                 <tr>
-                  <th className="w-14 px-6 py-4 font-semibold">
+                  <th className="w-14 px-6 py-4 font-bold text-black">
                     <input
                       type="checkbox"
                       aria-label="Select all contacts"
@@ -489,10 +489,10 @@ export default function Contacts() {
                       className="h-4 w-4 rounded border-[#64748b] bg-transparent text-[#6366f1] focus:ring-[#6366f1]"
                     />
                   </th>
-                  <th className="px-6 py-4 font-semibold">Name</th>
-                  <th className="px-6 py-4 font-semibold">Email</th>
-                  <th className="px-6 py-4 font-semibold">Status</th>
-                  <th className="px-6 py-4 font-semibold">Action</th>
+                  <th className="px-6 py-4 font-bold text-black">Name</th>
+                  <th className="px-6 py-4 font-bold text-black">Email</th>
+                  <th className="px-6 py-4 font-bold text-black">Status</th>
+                  <th className="px-6 py-4 font-bold text-black">Action</th>
                 </tr>
               </thead>
               <tbody>
