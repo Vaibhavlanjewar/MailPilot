@@ -7,17 +7,12 @@ import { api } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
 export default function Settings() {
-  const { user, ready, updateUser } = useAuth();
+  const { user, ready } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [profileSaving, setProfileSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
-  const [connectingGmail, setConnectingGmail] = useState(false);
-  const [hasGmailRefreshToken, setHasGmailRefreshToken] = useState(false);
-  const [profileName, setProfileName] = useState("");
-  const [profileEmail, setProfileEmail] = useState("");
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpFromDisplayName, setSmtpFromDisplayName] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -36,9 +31,6 @@ export default function Settings() {
     setBanner(null);
     try {
       const { data } = await api.get("/users/me/settings");
-      setHasGmailRefreshToken(Boolean(data.hasGmailRefreshToken));
-      setProfileName(data.name || "");
-      setProfileEmail(data.email || "");
       setSmtpUser(data.smtpUser?.trim() || data.email || "");
       setSmtpFromDisplayName(
         data.smtpFromDisplayName?.trim() || gmailFallbackName(data.smtpUser || data.email) || data.name || "",
@@ -84,42 +76,6 @@ export default function Settings() {
     );
   }, [location.pathname, location.search, navigate, load]);
 
-  async function handleConnectGmail() {
-    setConnectingGmail(true);
-    setBanner(null);
-    try {
-      const { data } = await api.get("/users/me/gmail/connect-url");
-      if (!data?.url) {
-        throw new Error("Could not get Gmail connect URL.");
-      }
-      window.location.assign(data.url);
-    } catch (err) {
-      setBanner({
-        type: "error",
-        text: err instanceof Error ? err.message : "Gmail connect failed.",
-      });
-      setConnectingGmail(false);
-    }
-  }
-
-  async function handleDisconnectGmail() {
-    setSaving(true);
-    setBanner(null);
-    try {
-      const { data } = await api.patch("/users/me/settings", {
-        gmailRefreshToken: "",
-      });
-      setHasGmailRefreshToken(Boolean(data.hasGmailRefreshToken));
-      setBanner({ type: "success", text: "Gmail connection removed." });
-    } catch (err) {
-      setBanner({
-        type: "error",
-        text: err instanceof Error ? err.message : "Could not disconnect Gmail.",
-      });
-    }
-    setSaving(false);
-  }
-
   async function handleSave(e) {
     e.preventDefault();
     setSaving(true);
@@ -145,30 +101,6 @@ export default function Settings() {
       });
     }
     setSaving(false);
-  }
-
-  async function handleSaveProfile(e) {
-    e.preventDefault();
-    setProfileSaving(true);
-    setBanner(null);
-    try {
-      const { data } = await api.patch("/users/me/profile", {
-        name: profileName.trim(),
-        email: profileEmail.trim().toLowerCase(),
-      });
-      if (data?.user) {
-        updateUser(data.user);
-        setProfileName(data.user.name || "");
-        setProfileEmail(data.user.email || "");
-      }
-      setBanner({ type: "success", text: "Profile updated successfully." });
-    } catch (err) {
-      setBanner({
-        type: "error",
-        text: err instanceof Error ? err.message : "Could not update profile.",
-      });
-    }
-    setProfileSaving(false);
   }
 
   async function handleChangePassword(e) {
@@ -255,40 +187,6 @@ export default function Settings() {
         </form>
       </Card>
 
-      <Card className={activeSection === "profile" || activeSection === "email" ? "ring-2 ring-app-focus" : ""}>
-        <CardHeader title="Account profile" description="Update your name and login email from here." />
-        <form onSubmit={handleSaveProfile} className="space-y-5">
-          <div>
-            <Label htmlFor="profileName">Name</Label>
-            <Input
-              id="profileName"
-              type="text"
-              value={profileName}
-              onChange={(e) => setProfileName(e.target.value)}
-              placeholder="Your name"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="profileEmail">Email</Label>
-            <Input
-              id="profileEmail"
-              type="email"
-              autoComplete="email"
-              value={profileEmail}
-              onChange={(e) => setProfileEmail(e.target.value)}
-              placeholder={user?.email || "you@example.com"}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <Button type="submit" disabled={profileSaving}>
-              {profileSaving ? "Saving…" : "Save profile"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-
       <Card className={activeSection === "password" ? "ring-2 ring-app-focus" : ""}>
         <CardHeader title="Change password" description="Use your current password to set a new password." />
         <form onSubmit={handleChangePassword} className="space-y-5">
@@ -324,37 +222,6 @@ export default function Settings() {
         </form>
       </Card>
 
-      <Card className="p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Connect with Gmail</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {hasGmailRefreshToken
-                ? "Connected"
-                : "Not connected"}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleConnectGmail}
-              disabled={connectingGmail || saving}
-            >
-              {connectingGmail ? "Redirecting…" : "Connect Gmail"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={saving || !hasGmailRefreshToken}
-              onClick={handleDisconnectGmail}
-            >
-              Disconnect
-            </Button>
-          </div>
-        </div>
-      </Card>
     </div>
   );
 }
