@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DataTable from '../components/ui/DataTable';
 import Input, { Select } from '../components/ui/Input';
 import Button from '../components/ui/Button';
@@ -6,6 +6,8 @@ import { api } from '../services/api';
 import { formatDateTime } from '../utils/format';
 
 const PAGE_SIZE = 10;
+const LIVE_REFRESH_MS = 12000;
+const LIVE_ANIMATION_MS = 1400;
 
 const SORT_OPTIONS = [
   { value: 'recently-opened', label: 'Recently Opened' },
@@ -13,12 +15,15 @@ const SORT_OPTIONS = [
   { value: 'not-opened', label: 'Not Opened First' },
 ];
 
-function StatusDot({ opened, openCount }) {
+function StatusDot({ opened, openCount, isLive }) {
   const title = opened ? `Opened ${openCount} times` : 'Not opened yet';
   const tick = openCount === 0 ? '✓' : '✓✓';
   return (
     <span
-      className={opened ? 'font-semibold text-emerald-700' : 'font-semibold text-slate-400'}
+      className={[
+        opened ? 'font-semibold text-emerald-700' : 'font-semibold text-slate-400',
+        isLive ? 'animate-tracking-open-pop' : '',
+      ].join(' ')}
       title={title}
       aria-label={title}
       aria-hidden="true"
@@ -46,6 +51,95 @@ export default function EmailTracking() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [liveAnimatedRows, setLiveAnimatedRows] = useState({});
+  const prevOpenCountRef = useRef(new Map());
+  const animationTimeoutsRef = useRef(new Map());
+
+  const markRowsLive = useCallback((ids) => {
+    if (!ids.length) return;
+    setLiveAnimatedRows((prev) => {
+      const next = { ...prev };
+      ids.forEach((id) => {
+        next[id] = true;
+      });
+      return next;
+    });
+
+    ids.forEach((id) => {
+      const existing = animationTimeoutsRef.current.get(id);
+      if (existing) clearTimeout(existing);
+      const timeout = setTimeout(() => {
+        setLiveAnimatedRows((prev) => {
+          if (!prev[id]) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        animationTimeoutsRef.current.delete(id);
+      }, LIVE_ANIMATION_MS);
+      animationTimeoutsRef.current.set(id, timeout);
+    });
+  }, []);
+
+  const loadTracking = useCallback(
+    async ({ silent = false, animateDiff = false } = {}) => {
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+
+      try {
+        const { data } = await api.get('/email-tracking', {
+          params: {
+            page,
+            limit: PAGE_SIZE,
+            search: search || undefined,
+            campaignId: campaignId || undefined,
+            sort,
+          },
+        });
+
+        const incoming = data.items || [];
+        if (animateDiff) {
+          const changedIds = [];
+          incoming.forEach((row) => {
+            const previous = prevOpenCountRef.current.get(row.id);
+            const current = Number(row.openCount || 0);
+            if (typeof previous === 'number' && current > previous) {
+              changedIds.push(row.id);
+            }
+          });
+          markRowsLive(changedIds);
+        }
+
+        const nextMap = new Map();
+        incoming.forEach((row) => {
+          nextMap.set(row.id, Number(row.openCount || 0));
+        });
+        prevOpenCountRef.current = nextMap;
+
+        setRows(incoming);
+        setCampaigns(data.campaigns || []);
+        setPagination(
+          data.pagination || {
+            page,
+            limit: PAGE_SIZE,
+            total: 0,
+            totalPages: 0,
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+        );
+      } catch (e) {
+        if (!silent) {
+          setError(e instanceof Error ? e : new Error(String(e)));
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [campaignId, markRowsLive, page, search, sort],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -60,51 +154,22 @@ export default function EmailTracking() {
   }, [campaignId, sort]);
 
   useEffect(() => {
-    let cancelled = false;
+    loadTracking();
+  }, [loadTracking]);
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data } = await api.get('/email-tracking', {
-          params: {
-            page,
-            limit: PAGE_SIZE,
-            search: search || undefined,
-            campaignId: campaignId || undefined,
-            sort,
-          },
-        });
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadTracking({ silent: true, animateDiff: true });
+    }, LIVE_REFRESH_MS);
+    return () => clearInterval(interval);
+  }, [loadTracking]);
 
-        if (cancelled) return;
-
-        setRows(data.items || []);
-        setCampaigns(data.campaigns || []);
-        setPagination(
-          data.pagination || {
-            page,
-            limit: PAGE_SIZE,
-            total: 0,
-            totalPages: 0,
-            hasNextPage: false,
-            hasPrevPage: false,
-          },
-        );
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e : new Error(String(e)));
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
+  useEffect(() => {
     return () => {
-      cancelled = true;
+      animationTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+      animationTimeoutsRef.current.clear();
     };
-  }, [page, search, campaignId, sort]);
+  }, []);
 
   const columns = useMemo(
     () => [
@@ -112,7 +177,13 @@ export default function EmailTracking() {
         key: 'status',
         header: 'Status',
         className: 'w-20',
-        render: (row) => <StatusDot opened={row.opened} openCount={row.openCount} />,
+        render: (row) => (
+          <StatusDot
+            opened={row.opened}
+            openCount={row.openCount}
+            isLive={Boolean(liveAnimatedRows[row.id])}
+          />
+        ),
       },
       {
         key: 'name',
@@ -136,7 +207,7 @@ export default function EmailTracking() {
         render: (row) => formatDateTime(row.recentlyOpenedAt),
       },
     ],
-    [],
+    [liveAnimatedRows],
   );
 
   const from = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1;
@@ -193,7 +264,7 @@ export default function EmailTracking() {
         rows={rows}
         loading={loading}
         emptyMessage="No tracking data found"
-        getRowClassName={() => ''}
+        getRowClassName={(row) => (liveAnimatedRows[row.id] ? 'animate-tracking-row-flash' : '')}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-app bg-app-surface p-4 text-sm text-app-muted">
