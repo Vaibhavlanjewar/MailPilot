@@ -36,7 +36,7 @@ export default function Campaigns() {
       header: 'Name',
       render: (row) => (
         <Link
-          to={`/campaigns/${row.id}`}
+          to={`/app/campaigns/${row.id}`}
           className="font-medium text-brand-700 hover:underline dark:text-brand-300"
         >
           {row.name}
