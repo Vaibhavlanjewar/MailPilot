@@ -1,14 +1,25 @@
 import { UnrecoverableError } from "bullmq";
+import jwt from "jsonwebtoken";
 import { Campaign } from "../models/Campaign.js";
 import { Contact } from "../models/Contact.js";
 import { EmailLog } from "../models/EmailLog.js";
 import { User } from "../models/User.js";
 import { sendCampaignMail } from "../services/email/campaignSend.js";
+import { env } from "../config/env.js";
 import { maybeFinishCampaign } from "../services/campaign.queue.service.js";
 import { resolveCampaignFrom } from "../utils/mailFrom.js";
 import { formatEmailSendErrorForLog } from "../utils/smtpErrors.js";
 import { renderRecipientTemplate } from "../utils/templateRenderer.js";
 import { logger } from "../utils/logger.js";
+
+function appendTrackingPixel(html, trackingUrl) {
+  if (!html) return html;
+  const pixel = `<img src="${trackingUrl}" alt="" width="1" height="1" style="display:block; width:1px; height:1px; border:0; margin:0; padding:0;" />`;
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${pixel}</body>`);
+  }
+  return `${html}${pixel}`;
+}
 
 /**
  * @param {import('bullmq').Job<{ emailLogId: string }>} job
@@ -58,11 +69,23 @@ export async function processEmailJob(job) {
   const html = renderRecipientTemplate(campaign.content, recipient);
   const text = renderRecipientTemplate(campaign.textContent || "", recipient) || undefined;
 
+  const trackingToken = jwt.sign(
+    { emailLogId: log._id.toString() },
+    env.jwt.secret,
+    { expiresIn: "7d" },
+  );
+  log.trackingToken = trackingToken;
+  await log.save();
+
+  const trackingBase = String(env.backendPublicUrl || "").replace(/\/$/, "");
+  const trackingUrl = `${trackingBase}/track?token=${encodeURIComponent(trackingToken)}`;
+  const trackedHtml = appendTrackingPixel(html, trackingUrl);
+
   try {
     const result = await sendCampaignMail(owner, {
       to: log.toEmail,
       subject,
-      html,
+      html: trackedHtml,
       text,
       from,
     });

@@ -12,6 +12,8 @@ import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import templateRoutes from "./routes/template.routes.js";
+import emailTrackingRoutes from "./routes/emailTracking.routes.js";
+import trackingRoutes from "./routes/tracking.routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
 const app = express();
@@ -163,9 +165,11 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/email-tracking", emailTrackingRoutes);
 app.use("/api/campaign", campaignRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/templates", templateRoutes);
+app.use("/track", trackingRoutes);
 
 // ✅ Serve frontend
 if (serveClient) {
