@@ -13,6 +13,7 @@ import EmailTracking from './pages/EmailTracking';
 import Settings from './pages/Settings';
 import HowToUse from './pages/HowToUse';
 import Pricing from './pages/Pricing';
+import ContactUs from './pages/ContactUs';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import GoogleLoginCallback from './pages/GoogleLoginCallback';
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/login/google/callback" element={<GoogleLoginCallback />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/contact-us" element={<ContactUs />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/app" element={<DashboardLayout />}>
