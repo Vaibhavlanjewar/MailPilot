@@ -3,18 +3,18 @@ import { LinkButton } from '../components/ui/Button';
 
 const steps = [
   {
-    title: '1. Set sender email',
+    title: '1. Connect Gmail from profile menu',
     description:
-      'Go to Settings, enter your Gmail address and sender name, then save sender settings.',
-    to: '/app/settings?section=email',
-    action: 'Open settings',
+      'Open the top-right profile menu, use the Connect with Gmail item above Log out, and watch the red or green status bullet.',
+    to: '/app',
+    action: 'Open dashboard',
   },
   {
-    title: '2. Connect Gmail',
+    title: '2. Set sender details',
     description:
-      'In Settings, connect Gmail so MailPilot can send using your account credentials securely.',
+      'In Settings, choose your Gmail address and sender name for campaign emails, then save sender settings.',
     to: '/app/settings',
-    action: 'Connect Gmail',
+    action: 'Open settings',
   },
   {
     title: '3. Add audience',
@@ -73,9 +73,9 @@ export default function HowToUse() {
             <p className="mb-3 text-sm font-semibold text-slate-800">System flow diagram</p>
 
             <div className="hidden gap-2 lg:grid lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
-              <FlowBlock title="Account" subtitle="Profile + Sender settings" />
+              <FlowBlock title="Account" subtitle="Profile menu + sender settings" />
               <Arrow />
-              <FlowBlock title="Email Connect" subtitle="Gmail OAuth linked" />
+              <FlowBlock title="Email Connect" subtitle="Profile menu status bullet + Gmail OAuth" />
               <Arrow />
               <FlowBlock title="Audience" subtitle="Contacts from CSV / manual" />
               <Arrow />
@@ -89,9 +89,9 @@ export default function HowToUse() {
             </div>
 
             <div className="space-y-2 lg:hidden">
-              <FlowBlock title="Account" subtitle="Profile + Sender settings" />
+              <FlowBlock title="Account" subtitle="Profile menu + sender settings" />
               <Arrow />
-              <FlowBlock title="Email Connect" subtitle="Gmail OAuth linked" />
+              <FlowBlock title="Email Connect" subtitle="Profile menu status bullet + Gmail OAuth" />
               <Arrow />
               <FlowBlock title="Audience" subtitle="Contacts from CSV / manual" />
               <Arrow />
