@@ -37,10 +37,19 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    const normalizedEmail = email.trim().toLowerCase();
     try {
-      await login(email.trim(), password);
+      await login(normalizedEmail, password);
       navigate(from, { replace: true });
     } catch (err) {
+      if (err?.status === 403 && err?.data?.requiresOtp) {
+        const params = new URLSearchParams({
+          email: normalizedEmail,
+          purpose: err?.data?.purpose === 'forgot' ? 'forgot' : 'register',
+        });
+        navigate(`/verify-otp?${params.toString()}`, { replace: true });
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);

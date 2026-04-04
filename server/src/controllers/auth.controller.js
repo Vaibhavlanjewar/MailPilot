@@ -291,7 +291,25 @@ export async function login(req, res, next) {
     }
 
     if (user.isVerified === false) {
-      throw new AppError('Please verify your email first', 403);
+      const meta = await issueOtp({
+        email,
+        purpose: 'register',
+        context: {
+          name: user.name || '',
+          passwordHash: user.passwordHash,
+        },
+      });
+
+      logger.info('Login blocked for unverified user; OTP sent', { userId: user._id, email });
+
+      return res.status(403).json({
+        message: 'Email not verified. OTP sent to your email.',
+        requiresOtp: true,
+        purpose: 'register',
+        email: meta.maskedEmail,
+        expiresIn: meta.expiresInSeconds,
+        resendAfter: meta.resendAfterSeconds,
+      });
     }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
