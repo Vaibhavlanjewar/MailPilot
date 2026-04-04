@@ -4,9 +4,28 @@ import { EmailLog } from "../models/EmailLog.js";
 import { AppError } from "../utils/AppError.js";
 import { getEmailQueue } from "../queues/email.queue.js";
 import { logger } from "../utils/logger.js";
+import { CAMPAIGN_DAILY_USER_LIMIT, CAMPAIGN_MAX_RECIPIENTS } from "../constants/campaignLimits.js";
 
 const JOB_ATTEMPTS = 3;
 const BACKOFF_MS = 5000;
+
+function getLocalDayWindow(now = new Date()) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+async function countQueuedTodayForUser(userId) {
+  const { start, end } = getLocalDayWindow();
+  const campaignIds = await Campaign.find({ userId }).distinct("_id");
+  if (!campaignIds.length) return 0;
+  return EmailLog.countDocuments({
+    campaignId: { $in: campaignIds },
+    createdAt: { $gte: start, $lt: end },
+  });
+}
 
 /**
  * Stagger dispatch so providers see a human-like cadence rather than a burst.
@@ -50,6 +69,22 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
   if (!contacts.length) {
     throw new AppError(
       "No recipients found. Upload contacts or attach contact IDs to the campaign.",
+      400,
+    );
+  }
+
+  if (contacts.length > CAMPAIGN_MAX_RECIPIENTS) {
+    throw new AppError(
+      `Max ${CAMPAIGN_MAX_RECIPIENTS} recipients allowed per campaign`,
+      400,
+    );
+  }
+
+  const sentToday = await countQueuedTodayForUser(userId);
+  if (sentToday + contacts.length > CAMPAIGN_DAILY_USER_LIMIT) {
+    const remaining = Math.max(0, CAMPAIGN_DAILY_USER_LIMIT - sentToday);
+    throw new AppError(
+      `Daily campaign limit exceeded. Remaining today: ${remaining}. Limit: ${CAMPAIGN_DAILY_USER_LIMIT}/day`,
       400,
     );
   }

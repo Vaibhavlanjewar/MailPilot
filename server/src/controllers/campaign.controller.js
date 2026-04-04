@@ -5,6 +5,39 @@ import { Contact } from '../models/Contact.js';
 import { AppError } from '../utils/AppError.js';
 import { enqueueCampaignSend } from '../services/campaign.queue.service.js';
 import { logger } from '../utils/logger.js';
+import { CAMPAIGN_DAILY_USER_LIMIT, CAMPAIGN_MAX_RECIPIENTS } from '../constants/campaignLimits.js';
+
+function getLocalDayWindow(now = new Date()) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+async function countQueuedTodayForUser(userId) {
+  const { start, end } = getLocalDayWindow();
+  const campaignIds = await Campaign.find({ userId }).distinct('_id');
+  if (!campaignIds.length) return 0;
+  return EmailLog.countDocuments({
+    campaignId: { $in: campaignIds },
+    createdAt: { $gte: start, $lt: end },
+  });
+}
+
+export async function getCampaignLimits(req, res, next) {
+  try {
+    const sentToday = await countQueuedTodayForUser(req.userId);
+    res.json({
+      maxRecipientsPerCampaign: CAMPAIGN_MAX_RECIPIENTS,
+      dailyLimit: CAMPAIGN_DAILY_USER_LIMIT,
+      sentToday,
+      remainingToday: Math.max(0, CAMPAIGN_DAILY_USER_LIMIT - sentToday),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function createCampaign(req, res, next) {
   try {
@@ -27,6 +60,13 @@ export async function createCampaign(req, res, next) {
         throw new AppError('One or more contacts are invalid or disabled', 400);
       }
       recipientContactIds = contactIds;
+    }
+
+    if (recipientContactIds.length > CAMPAIGN_MAX_RECIPIENTS) {
+      throw new AppError(
+        `Max ${CAMPAIGN_MAX_RECIPIENTS} recipients allowed per campaign`,
+        400,
+      );
     }
 
     let scheduledDate = null;
