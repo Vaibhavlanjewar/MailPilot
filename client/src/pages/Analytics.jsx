@@ -220,10 +220,15 @@ export default function Analytics() {
             <CardHeader
               title="Recent campaigns"
               description="Live data pulled from the analytics API."
+              action={
+                <LinkButton to="/app/campaigns" variant="secondary" size="sm">
+                  Show all
+                </LinkButton>
+              }
             />
               <div className="space-y-3 text-sm text-slate-600">
                 {recentCampaigns.length ? (
-                  recentCampaigns.map((campaign) => (
+                  recentCampaigns.slice(0, 3).map((campaign) => (
                     <div
                       key={campaign.id}
                       className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-surface-border bg-white px-4 py-3"
