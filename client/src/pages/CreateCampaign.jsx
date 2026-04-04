@@ -29,6 +29,7 @@ const emptyManualClient = () => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
   name: '',
   email: '',
+  company: '',
 });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -46,6 +47,7 @@ function dedupeContacts(list) {
     out.push({
       name: typeof row.name === 'string' ? row.name.trim() : '',
       email,
+      company: typeof row.company === 'string' ? row.company.trim() : '',
     });
   }
   return out;
@@ -133,7 +135,8 @@ export default function CreateCampaign() {
     return activeContacts.filter((contact) => {
       const name = (contact.name || '').toLowerCase();
       const email = (contact.email || '').toLowerCase();
-      return name.includes(query) || email.includes(query);
+      const company = (contact.company || '').toLowerCase();
+      return name.includes(query) || email.includes(query) || company.includes(query);
     });
   }, [activeContacts, contactFilter]);
 
@@ -180,15 +183,20 @@ export default function CreateCampaign() {
 
   const hasInvalidManualClient = manualClients.some((row) => {
     const name = typeof row.name === 'string' ? row.name.trim() : '';
+    const company = typeof row.company === 'string' ? row.company.trim() : '';
     const email = normalizeEmail(row.email);
-    return Boolean(name || email) && !EMAIL_RE.test(email);
+    return Boolean(name || company || email) && !EMAIL_RE.test(email);
   });
 
   const selectedContacts = useMemo(() => {
     const selected = new Set(selectedContactIds);
     return activeContacts
       .filter((contact) => selected.has(contact.id))
-      .map((contact) => ({ name: contact.name || '', email: contact.email || '' }));
+      .map((contact) => ({
+        name: contact.name || '',
+        email: contact.email || '',
+        company: contact.company || '',
+      }));
   }, [activeContacts, selectedContactIds]);
 
   const previewRecipients = audienceMode === 'contacts' ? selectedContacts : manualContacts;
@@ -479,7 +487,7 @@ export default function CreateCampaign() {
                 <Card>
                   <CardHeader
                     title="Add client"
-                    description="Add named clients. New clients are always included when sending this campaign."
+                    description="Add named clients and optionally capture their company name. New clients are always included when sending this campaign."
                   />
                   <div className="space-y-3">
                     {manualClients.length === 0 && (
@@ -487,10 +495,14 @@ export default function CreateCampaign() {
                     )}
                     {manualClients.map((client, index) => (
                       <div key={client.id} className="rounded-xl border border-surface-border p-3 dark:border-slate-700">
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                           <div>
                             <Label htmlFor={`client-name-${index}`}>Name</Label>
                             <Input id={`client-name-${index}`} value={client.name} onChange={(e) => updateManualClient(index, 'name', e.target.value)} placeholder="Client name" />
+                          </div>
+                          <div>
+                            <Label htmlFor={`client-company-${index}`}>Company name</Label>
+                            <Input id={`client-company-${index}`} value={client.company} onChange={(e) => updateManualClient(index, 'company', e.target.value)} placeholder="Optional" />
                           </div>
                           <div>
                             <Label htmlFor={`client-email-${index}`}>Email</Label>
@@ -591,6 +603,9 @@ export default function CreateCampaign() {
                       {previewRecipients.map((recipient, idx) => (
                         <div key={`${recipient.email}-${idx}`} className="rounded-lg bg-white px-3 py-2 text-sm dark:bg-slate-900">
                           <p className="font-medium text-slate-900 dark:text-slate-100">{recipient.name || 'Unnamed contact'}</p>
+                          {recipient.company ? (
+                            <p className="text-slate-600 dark:text-slate-300">{recipient.company}</p>
+                          ) : null}
                           <p className="text-slate-600 dark:text-slate-300">{recipient.email}</p>
                         </div>
                       ))}

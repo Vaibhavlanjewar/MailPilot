@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Card, { CardHeader } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Input, { Label } from "../components/ui/Input";
+import DataTable from "../components/ui/DataTable";
 import { PageLoader } from "../components/ui/LoadingSpinner";
 import { api } from "../services/api";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PAGE_SIZE = 10;
 
 function normalizeEmail(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -13,6 +15,14 @@ function normalizeEmail(value) {
 
 function normalizeName(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function makeEditDraft(contact) {
+  return {
+    name: contact?.name || "",
+    email: contact?.email || "",
+    company: contact?.company || "",
+  };
 }
 
 function StatusBadge({ subscribed }) {
@@ -56,10 +66,15 @@ export default function Contacts() {
   const [createBusy, setCreateBusy] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showManualAdd, setShowManualAdd] = useState(false);
-  const [draftContacts, setDraftContacts] = useState([{ name: "", email: "" }]);
+  const [draftContacts, setDraftContacts] = useState([{ name: "", email: "", company: "" }]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
   const [toggleBusyId, setToggleBusyId] = useState("");
+  const [editContact, setEditContact] = useState(null);
+  const [editDraft, setEditDraft] = useState(makeEditDraft(null));
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
   const [error, setError] = useState(null);
 
   const filteredRows = useMemo(() => {
@@ -68,9 +83,17 @@ export default function Contacts() {
     return rows.filter((row) => {
       const name = String(row.name || "").toLowerCase();
       const email = String(row.email || "").toLowerCase();
-      return name.includes(query) || email.includes(query);
+      const company = String(row.company || "").toLowerCase();
+      return name.includes(query) || email.includes(query) || company.includes(query);
     });
   }, [rows, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, page]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const existingEmailSet = useMemo(
@@ -81,10 +104,105 @@ export default function Contacts() {
     () => new Set(rows.map((row) => normalizeName(row.name)).filter(Boolean)),
     [rows],
   );
-  const allVisibleSelected =
-    filteredRows.length > 0 &&
-    filteredRows.every((row) => selectedSet.has(row.id));
   const selectedCount = selectedIds.length;
+  const currentPageSelected =
+    paginatedRows.length > 0 && paginatedRows.every((row) => selectedSet.has(row.id));
+
+  const columns = useMemo(
+    () => [
+      {
+        key: "select",
+        header: (
+          <input
+            type="checkbox"
+            aria-label="Select contacts on this page"
+            checked={currentPageSelected}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setSelectedIds((prev) => {
+                  const next = new Set(prev);
+                  paginatedRows.forEach((row) => next.add(row.id));
+                  return Array.from(next);
+                });
+                return;
+              }
+
+              setSelectedIds((prev) =>
+                prev.filter((id) => !paginatedRows.some((row) => row.id === id)),
+              );
+            }}
+            className="h-4 w-4 rounded border-[#64748b] bg-transparent text-[#6366f1] focus:ring-[#6366f1]"
+          />
+        ),
+        className: "w-14",
+        render: (row) => {
+          const selected = selectedSet.has(row.id);
+          return (
+            <input
+              type="checkbox"
+              aria-label={`Select ${row.email}`}
+              checked={selected}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedIds((prev) => [...prev, row.id]);
+                  return;
+                }
+                setSelectedIds((prev) => prev.filter((id) => id !== row.id));
+              }}
+              className="h-4 w-4 rounded border-[#64748b] bg-transparent text-[#6366f1] focus:ring-[#6366f1]"
+            />
+          );
+        },
+      },
+      {
+        key: "name",
+        header: "Name",
+        render: (row) => row.name || "Unnamed contact",
+      },
+      {
+        key: "company",
+        header: "Company",
+        render: (row) => row.company || "—",
+      },
+      {
+        key: "email",
+        header: "Email",
+        render: (row) => row.email,
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (row) => <StatusBadge subscribed={row.subscribed} />,
+      },
+      {
+        key: "action",
+        header: "Action",
+        render: (row) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => handleOpenEdit(row)}
+              disabled={toggleBusyId === row.id || bulkBusy || editBusy}
+            >
+              Edit
+            </Button>
+            <SubscriptionActionButton
+              subscribed={row.subscribed}
+              busy={toggleBusyId === row.id}
+              disabled={toggleBusyId === row.id || bulkBusy || editBusy}
+              onClick={() => void handleToggleSubscription(row)}
+            />
+          </div>
+        ),
+      },
+    ],
+    [bulkBusy, currentPageSelected, editBusy, paginatedRows, selectedSet, toggleBusyId],
+  );
+
+  const from = filteredRows.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, filteredRows.length);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,18 +227,99 @@ export default function Contacts() {
     );
   }, [rows]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
   async function handleToggleSubscription(row) {
+    const nextSubscribed = !row.subscribed;
     setToggleBusyId(row.id);
     setError(null);
+    setRows((current) =>
+      current.map((contact) =>
+        contact.id === row.id ? { ...contact, subscribed: nextSubscribed } : contact,
+      ),
+    );
     try {
       await api.patch(`/contacts/${row.id}/subscription`, {
-        subscribed: !row.subscribed,
+        subscribed: nextSubscribed,
       });
-      await load();
     } catch (err) {
+      setRows((current) =>
+        current.map((contact) =>
+          contact.id === row.id ? { ...contact, subscribed: row.subscribed } : contact,
+        ),
+      );
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setToggleBusyId("");
+    }
+  }
+
+  function handleOpenEdit(row) {
+    setEditContact(row);
+    setEditDraft(makeEditDraft(row));
+    setEditError("");
+  }
+
+  function handleCloseEdit() {
+    if (editBusy) return;
+    setEditContact(null);
+    setEditDraft(makeEditDraft(null));
+    setEditError("");
+  }
+
+  async function handleSaveEdit() {
+    if (!editContact || editBusy) return;
+
+    const nextEmail = typeof editDraft.email === "string" ? editDraft.email.trim().toLowerCase() : "";
+    const nextName = typeof editDraft.name === "string" ? editDraft.name.trim() : "";
+    const nextCompany = typeof editDraft.company === "string" ? editDraft.company.trim() : "";
+
+    if (!nextEmail || !EMAIL_RE.test(nextEmail)) {
+      setEditError("Enter a valid email address.");
+      return;
+    }
+
+    setEditBusy(true);
+    setEditError("");
+
+    const previousRow = editContact;
+    const optimisticRow = {
+      ...previousRow,
+      email: nextEmail,
+      name: nextName,
+      company: nextCompany,
+    };
+
+    setRows((current) =>
+      current.map((contact) => (contact.id === previousRow.id ? optimisticRow : contact)),
+    );
+
+    try {
+      const { data } = await api.patch(`/contacts/${previousRow.id}`, {
+        email: nextEmail,
+        name: nextName,
+        company: nextCompany,
+      });
+
+      const updated = data.contact || optimisticRow;
+      setRows((current) =>
+        current.map((contact) => (contact.id === previousRow.id ? { ...contact, ...updated } : contact)),
+      );
+      setEditContact(null);
+      setEditDraft(makeEditDraft(null));
+    } catch (err) {
+      setRows((current) =>
+        current.map((contact) => (contact.id === previousRow.id ? previousRow : contact)),
+      );
+      setEditError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEditBusy(false);
     }
   }
 
@@ -156,7 +355,7 @@ export default function Contacts() {
   }
 
   function handleAddDraft() {
-    setDraftContacts((prev) => [...prev, { name: "", email: "" }]);
+    setDraftContacts((prev) => [...prev, { name: "", email: "", company: "" }]);
   }
 
   function handleRemoveDraft(index) {
@@ -237,10 +436,11 @@ export default function Contacts() {
         contacts: draftContacts.map((row) => ({
           name: typeof row.name === "string" ? row.name.trim() : "",
           email: typeof row.email === "string" ? row.email.trim() : "",
+          company: typeof row.company === "string" ? row.company.trim() : "",
         })),
       });
       await load();
-      setDraftContacts([{ name: "", email: "" }]);
+      setDraftContacts([{ name: "", email: "", company: "" }]);
       setShowManualAdd(false);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -358,7 +558,7 @@ export default function Contacts() {
                     </Button>
                   )}
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <div>
                     <Label htmlFor={`client-name-${index}`}>Name</Label>
                     <Input
@@ -368,6 +568,18 @@ export default function Contacts() {
                       value={contact.name}
                       onChange={(e) =>
                         handleDraftChange(index, "name", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`client-company-${index}`}>Company name</Label>
+                    <Input
+                      id={`client-company-${index}`}
+                      type="text"
+                      placeholder="Optional"
+                      value={contact.company}
+                      onChange={(e) =>
+                        handleDraftChange(index, "company", e.target.value)
                       }
                     />
                   </div>
@@ -423,7 +635,7 @@ export default function Contacts() {
             <Input
               id="contact-search"
               type="text"
-              placeholder="Search by name or email"
+              placeholder="Search by name, email, or company"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -463,117 +675,127 @@ export default function Contacts() {
             </Button>
           </div>
         </div>
-        <div className="overflow-hidden rounded-t-2xl border border-[#334155] bg-[#0f172a] shadow-[0_18px_40px_-24px_rgba(15,23,42,0.9)] font-sans">
-          <div className="max-h-[560px] overflow-auto">
-            <table className="min-w-full text-left text-sm text-[#e2e8f0]">
-              <thead className="sticky top-0 z-10 bg-[#e5e7eb] text-[#1e293b]">
-                <tr>
-                  <th className="w-14 px-6 py-4 font-bold text-black">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all contacts"
-                      checked={allVisibleSelected}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedIds((prev) => {
-                            const next = new Set(prev);
-                            filteredRows.forEach((row) => next.add(row.id));
-                            return Array.from(next);
-                          });
-                          return;
-                        }
-                        setSelectedIds((prev) =>
-                          prev.filter((id) => !filteredRows.some((row) => row.id === id)),
-                        );
-                      }}
-                      className="h-4 w-4 rounded border-[#64748b] bg-transparent text-[#6366f1] focus:ring-[#6366f1]"
-                    />
-                  </th>
-                  <th className="px-6 py-4 font-bold text-black">Name</th>
-                  <th className="px-6 py-4 font-bold text-black">Email</th>
-                  <th className="px-6 py-4 font-bold text-black">Status</th>
-                  <th className="px-6 py-4 font-bold text-black">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && rows.length > 0 &&
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <tr key={`skeleton-${i}`} className="border-t border-[#334155] bg-[#1e293b]">
-                      <td className="px-6 py-4">
-                        <div className="h-4 w-4 animate-pulse rounded bg-[#334155]" />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="h-4 w-28 animate-pulse rounded bg-[#334155]" />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="h-4 w-44 animate-pulse rounded bg-[#334155]" />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="h-6 w-24 animate-pulse rounded-full bg-[#334155]" />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="h-8 w-20 animate-pulse rounded-full bg-[#334155]" />
-                      </td>
-                    </tr>
-                  ))}
+        <DataTable
+          columns={columns}
+          rows={paginatedRows}
+          loading={loading}
+          emptyMessage="No contacts yet. Upload a CSV or add them when creating a campaign."
+        />
 
-                {!loading && filteredRows.length === 0 && (
-                  <tr className="border-t border-[#334155] bg-[#1e293b]">
-                    <td className="px-6 py-10 text-center text-[#cbd5f5]" colSpan={5}>
-                      No contacts yet. Upload a CSV or add them when creating a campaign.
-                    </td>
-                  </tr>
-                )}
-
-                {!loading &&
-                  filteredRows.map((row) => {
-                    const selected = selectedSet.has(row.id);
-                    return (
-                      <tr
-                        key={row.id}
-                        className={[
-                          "border-t border-[#334155] bg-[#1e293b] transition-colors duration-150",
-                          selected ? "bg-[#273449]" : "hover:bg-[#273449]",
-                        ].join(" ")}
-                      >
-                        <td className="px-6 py-4">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${row.email}`}
-                            checked={selected}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedIds((prev) => [...prev, row.id]);
-                                return;
-                              }
-                              setSelectedIds((prev) => prev.filter((id) => id !== row.id));
-                            }}
-                            className="h-4 w-4 rounded border-[#64748b] bg-transparent text-[#6366f1] focus:ring-[#6366f1]"
-                          />
-                        </td>
-                        <td className="px-6 py-4 font-medium text-[#e2e8f0]">
-                          {row.name || "Unnamed contact"}
-                        </td>
-                        <td className="px-6 py-4 text-[#cbd5f5]">{row.email}</td>
-                        <td className="px-6 py-4">
-                          <StatusBadge subscribed={row.subscribed} />
-                        </td>
-                        <td className="px-6 py-4">
-                          <SubscriptionActionButton
-                            subscribed={row.subscribed}
-                            busy={toggleBusyId === row.id}
-                            disabled={toggleBusyId === row.id || bulkBusy}
-                            onClick={() => void handleToggleSubscription(row)}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-app bg-app-surface p-4 text-sm text-app-muted">
+          <p>
+            Showing {from}-{to} of {filteredRows.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={loading || page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Previous
+            </Button>
+            <span className="min-w-20 text-center text-app">
+              Page {page} / {totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={loading || page >= totalPages}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Next
+            </Button>
           </div>
         </div>
       </div>
+
+      {editContact && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6">
+          <Card className="w-full max-w-lg">
+            <CardHeader
+              title="Edit contact"
+              description="Update the contact's name, company, or email."
+            />
+
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleSaveEdit();
+              }}
+            >
+              {editError && (
+                <div className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                  {editError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="edit-contact-name">Name</Label>
+                  <Input
+                    id="edit-contact-name"
+                    value={editDraft.name}
+                    onChange={(e) =>
+                      setEditDraft((current) => ({
+                        ...current,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Client name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-contact-company">Company name</Label>
+                  <Input
+                    id="edit-contact-company"
+                    value={editDraft.company}
+                    onChange={(e) =>
+                      setEditDraft((current) => ({
+                        ...current,
+                        company: e.target.value,
+                      }))
+                    }
+                    placeholder="Optional"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-contact-email">Email</Label>
+                  <Input
+                    id="edit-contact-email"
+                    type="email"
+                    value={editDraft.email}
+                    onChange={(e) =>
+                      setEditDraft((current) => ({
+                        ...current,
+                        email: e.target.value,
+                      }))
+                    }
+                    placeholder="client@example.com"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleCloseEdit}
+                  disabled={editBusy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={editBusy}>
+                  {editBusy ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
