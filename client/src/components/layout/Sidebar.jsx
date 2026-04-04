@@ -100,7 +100,11 @@ function LayoutIcon({ className }) {
 function MegaphoneIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783m0 0a24.24 24.24 0 010 9.75m-9.75-9.75h9.75" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h10.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 8l4 4-4 4" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 8.5h4.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12h4.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 15.5h4.5" />
     </svg>
   );
 }
@@ -108,7 +112,8 @@ function MegaphoneIcon({ className }) {
 function UsersIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.813-3.714M6 12a3 3 0 11-6 0 3 3 0 016 0zm12 4.5a3 3 0 11-6 0 3 3 0 016 0z" />
+      <rect x="3" y="5" width="18" height="14" rx="2.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 7l7.5 5.5L19.5 7" />
     </svg>
   );
 }

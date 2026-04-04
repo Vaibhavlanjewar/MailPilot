@@ -48,7 +48,7 @@ export async function processEmailJob(job) {
   }
 
   const contact = await Contact.findById(log.contactId)
-    .select("name email")
+    .select("name email company")
     .lean();
 
   const owner = await User.findById(campaign.userId)
@@ -64,7 +64,7 @@ export async function processEmailJob(job) {
     throw new UnrecoverableError("Account missing");
   }
   const from = resolveCampaignFrom(owner);
-  const recipient = contact || { name: "", email: log.toEmail };
+  const recipient = contact || { name: "", email: log.toEmail, company: "" };
   const subject = renderRecipientTemplate(campaign.subject, recipient);
   const html = renderRecipientTemplate(campaign.content, recipient);
   const text = renderRecipientTemplate(campaign.textContent || "", recipient) || undefined;

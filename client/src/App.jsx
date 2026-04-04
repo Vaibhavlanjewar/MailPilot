@@ -8,11 +8,13 @@ import CreateCampaign from './pages/CreateCampaign';
 import CampaignDetail from './pages/CampaignDetail';
 import Contacts from './pages/Contacts';
 import Templates from './pages/Templates';
+import TemplateEditor from './pages/TemplateEditor';
 import Analytics from './pages/Analytics';
 import EmailTracking from './pages/EmailTracking';
 import Settings from './pages/Settings';
 import HowToUse from './pages/HowToUse';
 import Pricing from './pages/Pricing';
+import ContactUs from './pages/ContactUs';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import GoogleLoginCallback from './pages/GoogleLoginCallback';
@@ -24,6 +26,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/login/google/callback" element={<GoogleLoginCallback />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/contact-us" element={<ContactUs />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/app" element={<DashboardLayout />}>
@@ -33,6 +36,8 @@ export default function App() {
           <Route path="campaigns/new" element={<CreateCampaign />} />
           <Route path="contacts" element={<Contacts />} />
           <Route path="templates" element={<Templates />} />
+          <Route path="templates/new" element={<TemplateEditor />} />
+          <Route path="templates/:id/edit" element={<TemplateEditor />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="email-tracking" element={<EmailTracking />} />
           <Route path="settings" element={<Settings />} />

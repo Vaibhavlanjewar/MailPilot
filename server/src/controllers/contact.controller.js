@@ -31,6 +31,7 @@ export async function bulkContacts(req, res, next) {
       seenEmails.add(raw);
 
       const name = typeof c?.name === 'string' ? c.name.trim() : '';
+      const company = typeof c?.company === 'string' ? c.company.trim() : '';
 
       if (name) {
         const normalizedName = name.toLowerCase();
@@ -41,7 +42,7 @@ export async function bulkContacts(req, res, next) {
         seenNames.add(normalizedName);
       }
 
-      normalized.push({ email: raw, name });
+      normalized.push({ email: raw, name, company });
     }
 
     if (!normalized.length) {
@@ -105,7 +106,14 @@ export async function bulkContacts(req, res, next) {
       updateOne: {
         filter: { userId, email: row.email },
         update: {
-          ...(row.name ? { $set: { name: row.name } } : {}),
+          ...((row.name || row.company)
+            ? {
+                $set: {
+                  ...(row.name ? { name: row.name } : {}),
+                  ...(row.company ? { company: row.company } : {}),
+                },
+              }
+            : {}),
           $setOnInsert: { userId, email: row.email },
         },
         upsert: true,
@@ -144,6 +152,7 @@ export async function listContacts(req, res, next) {
         id: c._id.toString(),
         email: c.email,
         name: c.name || '',
+        company: c.company || '',
         subscribed: c.subscribed !== false,
       })),
     });
@@ -195,7 +204,14 @@ export async function uploadContacts(req, res, next) {
       updateOne: {
         filter: { userId, email: row.email },
         update: {
-          ...(row.name ? { $set: { name: row.name } } : {}),
+          ...((row.name || row.company)
+            ? {
+                $set: {
+                  ...(row.name ? { name: row.name } : {}),
+                  ...(row.company ? { company: row.company } : {}),
+                },
+              }
+            : {}),
           $setOnInsert: { userId, email: row.email },
         },
         upsert: true,

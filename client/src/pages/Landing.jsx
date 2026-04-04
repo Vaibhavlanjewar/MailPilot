@@ -52,7 +52,8 @@ const upcomingFeatures = [
   },
 ];
 
-const googleFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSff_YjvIVpgc6umn0zl3mihp7dvTYztqREbj_HElb70wCpXaw/viewform?usp=publish-editor';
+const googleFormUrl =
+  "https://docs.google.com/forms/d/e/1FAIpQLSff_YjvIVpgc6umn0zl3mihp7dvTYztqREbj_HElb70wCpXaw/viewform?usp=publish-editor";
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
@@ -194,7 +195,11 @@ export default function Landing() {
             </div>
             <div className="space-y-3">
               {[78, 64, 92, 70, 88].map((v, i) => (
-                <div key={`${velocityAnimCycle}-${i}`} className="animate-velocity-row" style={{ animationDelay: `${i * 90}ms` }}>
+                <div
+                  key={`${velocityAnimCycle}-${i}`}
+                  className="animate-velocity-row"
+                  style={{ animationDelay: `${i * 90}ms` }}
+                >
                   <div className="mb-1 flex items-center justify-between text-xs text-[var(--text-secondary)]">
                     <span>Week {i + 1}</span>
                     <span>{v}%</span>
@@ -202,7 +207,10 @@ export default function Landing() {
                   <div className="h-2 rounded-full bg-[color:var(--surface-border)]/70">
                     <div
                       className="animate-velocity-bar h-2 rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)]"
-                      style={{ width: `${v}%`, animationDelay: `${200 + i * 120}ms` }}
+                      style={{
+                        width: `${v}%`,
+                        animationDelay: `${200 + i * 120}ms`,
+                      }}
                     />
                   </div>
                 </div>
@@ -252,10 +260,19 @@ export default function Landing() {
                 key={item.title}
                 className="relative rounded-2xl border border-[color:var(--surface-border)] bg-[var(--surface)] p-6 shadow-app-soft transition hover:-translate-y-0.5 hover:shadow-app-elevated"
                 onClick={() => handleUpcomingCardClick(item.title)}
-                role={item.title === "Email open tracking" && isAuthenticated ? "button" : undefined}
-                tabIndex={item.title === "Email open tracking" && isAuthenticated ? 0 : undefined}
+                role={
+                  item.title === "Email open tracking" && isAuthenticated
+                    ? "button"
+                    : undefined
+                }
+                tabIndex={
+                  item.title === "Email open tracking" && isAuthenticated
+                    ? 0
+                    : undefined
+                }
                 onKeyDown={(event) => {
-                  if (item.title !== "Email open tracking" || !isAuthenticated) return;
+                  if (item.title !== "Email open tracking" || !isAuthenticated)
+                    return;
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     navigate("/app/email-tracking");
@@ -275,19 +292,21 @@ export default function Landing() {
               >
                 <span
                   className={[
-                    'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
-                    item.title === 'Email open tracking'
-                      ? 'border-[color:rgba(var(--secondary-rgb),0.45)] bg-[color:rgba(var(--secondary-rgb),0.14)] text-[var(--secondary)]'
-                      : 'border-[color:rgba(var(--primary-rgb),0.4)] bg-[color:rgba(var(--primary-rgb),0.12)] text-[var(--primary)]',
-                  ].join(' ')}
+                    "absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                    item.title === "Email open tracking"
+                      ? "border-[color:rgba(var(--secondary-rgb),0.45)] bg-[color:rgba(var(--secondary-rgb),0.14)] text-[var(--secondary)]"
+                      : "border-[color:rgba(var(--primary-rgb),0.4)] bg-[color:rgba(var(--primary-rgb),0.12)] text-[var(--primary)]",
+                  ].join(" ")}
                 >
                   <span className="relative inline-flex h-2 w-2">
-                    {item.title === 'Email open tracking' ? (
+                    {item.title === "Email open tracking" ? (
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-70" />
                     ) : null}
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
                   </span>
-                  {item.title === 'Email open tracking' ? 'Live-Now' : 'Coming-Soon'}
+                  {item.title === "Email open tracking"
+                    ? "Live-Now"
+                    : "Coming-Soon"}
                 </span>
                 <h3 className="pr-28 text-lg font-semibold tracking-tight">
                   <span>{item.title}</span>
@@ -329,10 +348,20 @@ export default function Landing() {
       </main>
 
       <footer className="border-t border-[color:var(--surface-border)] bg-[var(--surface)]/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-[var(--text-secondary)]">
-            Copyright © {new Date().getFullYear()} MailPilot Team. All rights reserved.
+            Copyright © {new Date().getFullYear()} MailPilot Team. All rights
+            reserved.
           </p>
+
+          <div className="mt-2 text-center">
+            <Link
+              to="/contact-us"
+              className="text-xs font-semibold tracking-wide text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            >
+              Contact Us
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

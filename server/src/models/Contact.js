@@ -15,6 +15,7 @@ const contactSchema = new mongoose.Schema(
       trim: true,
     },
     name: { type: String, trim: true, default: '' },
+    company: { type: String, trim: true, default: '' },
     subscribed: { type: Boolean, default: true, index: true },
   },
   { timestamps: true }

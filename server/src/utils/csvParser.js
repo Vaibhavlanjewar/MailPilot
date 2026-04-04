@@ -3,9 +3,9 @@ import validator from 'validator';
 import { AppError } from './AppError.js';
 
 /**
- * Expected CSV columns: email (required), name (optional).
+ * Expected CSV columns: email (required), name (optional), company (optional).
  * @param {Buffer|string} buffer
- * @returns {{ email: string, name?: string }[]}
+ * @returns {{ email: string, name?: string, company?: string }[]}
  */
 export function parseContactsCsv(buffer) {
   const text = buffer.toString('utf8').trim();
@@ -37,6 +37,7 @@ export function parseContactsCsv(buffer) {
       (k) => k.toLowerCase() === 'email'
     );
     const nameKey = Object.keys(row).find((k) => k.toLowerCase() === 'name');
+    const companyKey = Object.keys(row).find((k) => k.toLowerCase() === 'company');
 
     const rawEmail = emailKey ? row[emailKey] : row.email || row.Email;
     const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
@@ -49,10 +50,12 @@ export function parseContactsCsv(buffer) {
     seen.add(email);
 
     const name = nameKey ? String(row[nameKey] || '').trim() : '';
+    const company = companyKey ? String(row[companyKey] || '').trim() : '';
 
     normalized.push({
       email,
       ...(name ? { name } : {}),
+      ...(company ? { company } : {}),
     });
   }
 

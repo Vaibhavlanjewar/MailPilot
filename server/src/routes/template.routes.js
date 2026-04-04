@@ -9,6 +9,14 @@ const router = Router();
 router.get('/', authenticate, templateController.listTemplates);
 
 router.post(
+  '/ai-generate',
+  authenticate,
+  body('prompt').trim().notEmpty().withMessage('prompt is required'),
+  validateRequest,
+  templateController.generateTemplateAi
+);
+
+router.post(
   '/',
   authenticate,
   body('name').trim().notEmpty().withMessage('name is required'),
