@@ -7,6 +7,7 @@ import * as campaignController from '../controllers/campaign.controller.js';
 const router = Router();
 
 router.get('/', authenticate, campaignController.listCampaigns);
+router.get('/limits', authenticate, campaignController.getCampaignLimits);
 
 const createRules = [
   body('name').trim().notEmpty().withMessage('name is required'),

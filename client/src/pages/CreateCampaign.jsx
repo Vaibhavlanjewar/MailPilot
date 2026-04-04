@@ -5,6 +5,7 @@ import Button from '../components/ui/Button';
 import Input, { Label, TextArea, Select } from '../components/ui/Input';
 import HtmlPreview, { HtmlViewModeToggle } from '../components/HtmlPreview';
 import Badge from '../components/ui/Badge';
+import { toast } from 'react-toastify';
 import { cn } from '../utils/cn';
 import { api } from '../services/api';
 
@@ -32,6 +33,10 @@ const emptyManualClient = () => ({
   company: '',
 });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_RECIPIENTS_PER_CAMPAIGN = 100;
+const DAILY_RECIPIENT_LIMIT = 450;
+const CONTACT_BATCH_SIZE = 100;
+const CUSTOM_BATCH_VALUE = '__custom_range__';
 
 function normalizeEmail(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -72,6 +77,15 @@ export default function CreateCampaign() {
 
   const [audienceMode, setAudienceMode] = useState('contacts');
   const [manualClients, setManualClients] = useState([]);
+  const [selectedContactBatch, setSelectedContactBatch] = useState('');
+  const [customRangeStart, setCustomRangeStart] = useState('');
+  const [customRangeEnd, setCustomRangeEnd] = useState('');
+  const [campaignLimits, setCampaignLimits] = useState({
+    maxRecipientsPerCampaign: MAX_RECIPIENTS_PER_CAMPAIGN,
+    dailyLimit: DAILY_RECIPIENT_LIMIT,
+    sentToday: 0,
+    remainingToday: DAILY_RECIPIENT_LIMIT,
+  });
 
   const loadTemplates = useCallback(async () => {
     setTemplatesLoading(true);
@@ -99,10 +113,29 @@ export default function CreateCampaign() {
     }
   }, []);
 
+  const loadCampaignLimits = useCallback(async () => {
+    try {
+      const { data } = await api.get('/campaign/limits');
+      setCampaignLimits({
+        maxRecipientsPerCampaign: Number(data?.maxRecipientsPerCampaign) || MAX_RECIPIENTS_PER_CAMPAIGN,
+        dailyLimit: Number(data?.dailyLimit) || DAILY_RECIPIENT_LIMIT,
+        sentToday: Number(data?.sentToday) || 0,
+        remainingToday: Number(data?.remainingToday) || 0,
+      });
+    } catch {
+      setCampaignLimits((prev) => ({
+        ...prev,
+        maxRecipientsPerCampaign: MAX_RECIPIENTS_PER_CAMPAIGN,
+        dailyLimit: DAILY_RECIPIENT_LIMIT,
+      }));
+    }
+  }, []);
+
   useEffect(() => {
     loadTemplates();
     loadContacts();
-  }, [loadTemplates, loadContacts]);
+    loadCampaignLimits();
+  }, [loadTemplates, loadContacts, loadCampaignLimits]);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -140,23 +173,33 @@ export default function CreateCampaign() {
     });
   }, [activeContacts, contactFilter]);
 
+  const filteredContactSerialMap = useMemo(() => {
+    const map = new Map();
+    filteredContacts.forEach((contact, index) => {
+      map.set(contact.id, index + 1);
+    });
+    return map;
+  }, [filteredContacts]);
+
+  const step2Contacts = useMemo(() => {
+    const selectedSet = new Set(selectedContactIds);
+    const selected = [];
+    const unselected = [];
+
+    for (const contact of filteredContacts) {
+      if (selectedSet.has(contact.id)) selected.push(contact);
+      else unselected.push(contact);
+    }
+
+    return [...selected, ...unselected];
+  }, [filteredContacts, selectedContactIds]);
+
   function toggleContact(contactId) {
+    setSelectedContactBatch('');
     setSelectedContactIds((current) =>
       current.includes(contactId)
         ? current.filter((id) => id !== contactId)
         : [...current, contactId],
-    );
-  }
-
-  function toggleSelectAllVisible() {
-    const visibleIds = filteredContacts.map((contact) => contact.id);
-    if (!visibleIds.length) return;
-
-    const allSelected = visibleIds.every((id) => selectedContactIds.includes(id));
-    setSelectedContactIds((current) =>
-      allSelected
-        ? current.filter((id) => !visibleIds.includes(id))
-        : Array.from(new Set([...current, ...visibleIds])),
     );
   }
 
@@ -201,14 +244,100 @@ export default function CreateCampaign() {
 
   const previewRecipients = audienceMode === 'contacts' ? selectedContacts : manualContacts;
 
+  const contactBatchOptions = useMemo(() => {
+    const options = [];
+    for (let start = 0; start < activeContacts.length; start += CONTACT_BATCH_SIZE) {
+      const endExclusive = Math.min(start + CONTACT_BATCH_SIZE, activeContacts.length);
+      const startLabel = start + 1;
+      const endLabel = endExclusive;
+      options.push({
+        value: `${startLabel}-${endLabel}`,
+        label: `${startLabel}-${endLabel}`,
+        ids: activeContacts.slice(start, endExclusive).map((contact) => contact.id),
+      });
+    }
+    return options;
+  }, [activeContacts]);
+
+  function selectContactBatch(value) {
+    setSelectedContactBatch(value);
+    if (value === CUSTOM_BATCH_VALUE) {
+      setSelectedContactIds([]);
+      return;
+    }
+    if (!value) return;
+    const batch = contactBatchOptions.find((option) => option.value === value);
+    if (!batch) return;
+    setSelectedContactIds(batch.ids);
+    setError('');
+  }
+
+  function applyCustomRange() {
+    const start = Number.parseInt(customRangeStart, 10);
+    const end = Number.parseInt(customRangeEnd, 10);
+
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      toast.error('Enter valid start and end numbers');
+      return;
+    }
+
+    if (start < 1 || end < 1 || start > end) {
+      toast.error('Invalid range. Use start <= end and values >= 1');
+      return;
+    }
+
+    if (end > activeContacts.length) {
+      toast.error(`Range end cannot exceed ${activeContacts.length}`);
+      return;
+    }
+
+    const count = end - start + 1;
+    if (count > CONTACT_BATCH_SIZE) {
+      toast.error('Custom range cannot be more than 100 contacts');
+      return;
+    }
+
+    const ids = activeContacts.slice(start - 1, end).map((contact) => contact.id);
+    setSelectedContactIds(ids);
+    setError('');
+  }
+
   const hasAudienceInput =
     audienceMode === 'contacts'
       ? selectedContactIds.length > 0
       : manualContacts.length > 0;
 
-  const allFilteredSelected =
-    filteredContacts.length > 0 &&
-    filteredContacts.every((contact) => selectedContactIds.includes(contact.id));
+  const selectedRecipientsCount = previewRecipients.length;
+  const campaignLimitExceeded = selectedRecipientsCount > campaignLimits.maxRecipientsPerCampaign;
+  const dailyLimitExceeded = selectedRecipientsCount > campaignLimits.remainingToday;
+
+  const audienceLimitError =
+    campaignLimitExceeded
+      ? `Max ${campaignLimits.maxRecipientsPerCampaign} recipients allowed per campaign.`
+      : dailyLimitExceeded
+        ? `Daily limit exceeded. Remaining today: ${campaignLimits.remainingToday} of ${campaignLimits.dailyLimit}.`
+        : '';
+
+  useEffect(() => {
+    if (step !== 2) return;
+
+    if (campaignLimitExceeded) {
+      toast.error('❌ Max 100 recipients per campaign', {
+        toastId: 'campaign-limit-max-100',
+      });
+    }
+
+    if (dailyLimitExceeded) {
+      toast.error(`❌ Daily limit: ${campaignLimits.dailyLimit} emails reached`, {
+        toastId: 'campaign-limit-daily-450',
+      });
+    }
+  }, [
+    step,
+    campaignLimitExceeded,
+    dailyLimitExceeded,
+    campaignLimits.dailyLimit,
+  ]);
 
   function next() {
     setError('');
@@ -297,12 +426,33 @@ export default function CreateCampaign() {
     step === 1
       ? form.name.trim()
       : step === 2
-        ? hasAudienceInput
+        ? hasAudienceInput && !audienceLimitError
         : step === 3
           ? form.body.trim().length > 0
           : step === 4
             ? previewRecipients.length > 0
             : true;
+
+  function handleNextStep() {
+    setError('');
+    if (step === 2) {
+      if (campaignLimitExceeded) {
+        toast.error('❌ Max 100 recipients per campaign', {
+          toastId: 'campaign-limit-max-100',
+        });
+      }
+      if (dailyLimitExceeded) {
+        toast.error(`❌ Daily limit: ${campaignLimits.dailyLimit} emails reached`, {
+          toastId: 'campaign-limit-daily-450',
+        });
+      }
+      if (audienceLimitError) {
+        setError(audienceLimitError);
+        return;
+      }
+    }
+    next();
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -359,6 +509,14 @@ export default function CreateCampaign() {
                       ? 'Review header, content, and receiver list before sending.'
                       : 'Send immediately or schedule. Jobs are queued on the server.'
             }
+            action={
+              step === 2 ? (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-right text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+                  <p className="font-semibold">🚀 Campaign Limits</p>
+                  <p>Max: 100 per campaign • 450/day</p>
+                </div>
+              ) : null
+            }
           />
 
           {error && (
@@ -378,6 +536,20 @@ export default function CreateCampaign() {
 
           {step === 2 && (
             <div className="space-y-5">
+              {(audienceLimitError || selectedRecipientsCount > 0) && (
+                <div className={cn(
+                  'rounded-lg px-4 py-3 text-sm',
+                  audienceLimitError
+                    ? 'bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200'
+                    : 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-200',
+                )}>
+                  <p>
+                    Selected: {selectedRecipientsCount} • Remaining today: {campaignLimits.remainingToday} / {campaignLimits.dailyLimit}
+                  </p>
+                  {audienceLimitError ? <p className="mt-1 font-medium">{audienceLimitError}</p> : null}
+                </div>
+              )}
+
               {contactsError && (
                 <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900">
                   {contactsError}
@@ -429,17 +601,52 @@ export default function CreateCampaign() {
                       <p className="text-sm text-slate-500">
                         {selectedContactIds.length} selected of {filteredContacts.length} visible
                       </p>
-                      <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                          checked={allFilteredSelected}
-                          onChange={toggleSelectAllVisible}
-                          disabled={!filteredContacts.length}
-                        />
-                        Select all
-                      </label>
+                      <div className="w-full max-w-[220px]">
+                        <Select
+                          id="contactBatch"
+                          value={selectedContactBatch}
+                          onChange={(e) => selectContactBatch(e.target.value)}
+                          disabled={!contactBatchOptions.length}
+                        >
+                          <option value="">Select client batch</option>
+                          {contactBatchOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                          <option value={CUSTOM_BATCH_VALUE}>Custom range</option>
+                        </Select>
+                      </div>
                     </div>
+
+                    {selectedContactBatch === CUSTOM_BATCH_VALUE && (
+                      <div className="rounded-xl border border-surface-border bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">
+                          Enter custom range (max 100 contacts)
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                          <Input
+                            type="number"
+                            min={1}
+                            max={activeContacts.length || 1}
+                            placeholder="Start (e.g. 101)"
+                            value={customRangeStart}
+                            onChange={(e) => setCustomRangeStart(e.target.value)}
+                          />
+                          <Input
+                            type="number"
+                            min={1}
+                            max={activeContacts.length || 1}
+                            placeholder="End (e.g. 180)"
+                            value={customRangeEnd}
+                            onChange={(e) => setCustomRangeEnd(e.target.value)}
+                          />
+                          <Button type="button" variant="secondary" onClick={applyCustomRange}>
+                            Apply
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="max-h-80 overflow-auto rounded-xl border border-surface-border bg-slate-50/70 p-2 dark:border-slate-700 dark:bg-slate-950/40">
                       {contactsLoading ? (
@@ -448,8 +655,9 @@ export default function CreateCampaign() {
                         <div className="px-3 py-6 text-sm text-slate-500">No contacts found.</div>
                       ) : (
                         <div className="space-y-2">
-                          {filteredContacts.map((contact) => {
+                          {step2Contacts.map((contact) => {
                             const checked = selectedContactIds.includes(contact.id);
+                            const serialNo = filteredContactSerialMap.get(contact.id);
                             return (
                               <label
                                 key={contact.id}
@@ -460,12 +668,17 @@ export default function CreateCampaign() {
                                     : 'border-transparent bg-white hover:border-surface-border dark:bg-slate-900',
                                 )}
                               >
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                                  checked={checked}
-                                  onChange={() => toggleContact(contact.id)}
-                                />
+                                <div className="flex items-center gap-2 pt-0.5">
+                                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-200 px-2 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
+                                    {serialNo}
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                    checked={checked}
+                                    onChange={() => toggleContact(contact.id)}
+                                  />
+                                </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-medium text-slate-900 dark:text-slate-100">
@@ -653,7 +866,7 @@ export default function CreateCampaign() {
             </Button>
             <div className="flex gap-3">
               {step < 5 ? (
-                <Button type="button" onClick={next} disabled={!canNext}>
+                <Button type="button" onClick={handleNextStep} disabled={!canNext}>
                   Continue
                 </Button>
               ) : (

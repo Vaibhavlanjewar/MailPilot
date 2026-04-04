@@ -1,0 +1,2 @@
+export const CAMPAIGN_MAX_RECIPIENTS = 100;
+export const CAMPAIGN_DAILY_USER_LIMIT = 450;
