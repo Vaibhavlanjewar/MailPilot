@@ -25,15 +25,43 @@ export const env = {
     secret: process.env.JWT_SECRET || "dev-only-change-me",
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   },
+  auth: {
+    otpExpiryMs: Math.max(60_000, Number(process.env.OTP_EXPIRY_MS) || 300_000),
+    otpResendCooldownMs: Math.max(
+      10_000,
+      Number(process.env.OTP_RESEND_COOLDOWN_MS) || 30_000,
+    ),
+  },
   email: {
     provider: process.env.EMAIL_PROVIDER || "nodemailer",
     from: process.env.EMAIL_FROM || "MailPilot <noreply@example.com>",
+    otpGmail: {
+      clientId:
+        process.env.MAILPILOT_OTP_GMAIL_CLIENT_ID ||
+        process.env.GMAIL_CLIENT_ID,
+      clientSecret:
+        process.env.MAILPILOT_OTP_GMAIL_CLIENT_SECRET ||
+        process.env.GMAIL_CLIENT_SECRET,
+      redirectUri:
+        process.env.MAILPILOT_OTP_GMAIL_REDIRECT_URI ||
+        process.env.GMAIL_REDIRECT_URI ||
+        "https://developers.google.com/oauthplayground",
+      refreshToken:
+        process.env.MAILPILOT_OTP_GMAIL_REFRESH_TOKEN ||
+        process.env.GMAIL_REFRESH_TOKEN,
+      senderEmail:
+        process.env.MAILPILOT_OTP_GMAIL_SENDER_EMAIL ||
+        process.env.GMAIL_SENDER_EMAIL ||
+        "mailpilot.io@gmail.com",
+    },
     gmail: {
       clientId: process.env.GMAIL_CLIENT_ID,
       clientSecret: process.env.GMAIL_CLIENT_SECRET,
       redirectUri:
         process.env.GMAIL_REDIRECT_URI ||
         "https://developers.google.com/oauthplayground",
+      refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+      senderEmail: process.env.GMAIL_SENDER_EMAIL || "mailpilot.io@gmail.com",
     },
     smtp: {
       host: process.env.SMTP_HOST,

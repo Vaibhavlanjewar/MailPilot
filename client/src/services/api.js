@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from 'react-toastify';
 
 export const TOKEN_KEY = 'mailpilot_token';
 export const USER_KEY = 'mailpilot_user';
@@ -35,11 +36,30 @@ export function getAuthToken() {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const isTimeout =
+      error?.code === 'ECONNABORTED' ||
+      /timeout/i.test(String(error?.message || ''));
+
+    if (isTimeout) {
+      const busyMessage =
+        'Please wait, server busy to watch IPL. Please refresh 1-2 time.';
+      if (!toast.isActive('server-timeout-busy')) {
+        toast.error(busyMessage, { toastId: 'server-timeout-busy' });
+      }
+      return Promise.reject(new Error(busyMessage));
+    }
+
     if (error.response?.status === 401) {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
       const path = window.location.pathname;
-      if (!path.startsWith('/login') && !path.startsWith('/register')) {
+      if (
+        !path.startsWith('/login') &&
+        !path.startsWith('/register') &&
+        !path.startsWith('/verify-otp') &&
+        !path.startsWith('/forgot-password') &&
+        !path.startsWith('/reset-password')
+      ) {
         window.location.href = '/';
       }
     }

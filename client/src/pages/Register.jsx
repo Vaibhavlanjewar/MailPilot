@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import Card, { CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input, { Label } from '../components/ui/Input';
+import PasswordInput from '../components/ui/PasswordInput';
 import { useAuth } from '../context/AuthContext';
 import { getAuthToken } from '../services/api';
 import { PageLoader } from '../components/ui/LoadingSpinner';
@@ -35,12 +37,13 @@ export default function Register() {
     setError('');
     setLoading(true);
     try {
-      await register({
+      const data = await register({
         email: email.trim(),
         password,
         name: name.trim(),
       });
-      navigate('/app', { replace: true });
+      toast.success(data?.message || 'OTP sent to your email');
+      navigate(`/verify-otp?email=${encodeURIComponent(email.trim())}&purpose=register`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -91,9 +94,8 @@ export default function Register() {
             </div>
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"

@@ -14,6 +14,10 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false,
     },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
     name: { type: String, trim: true, default: "" },
     /** SMTP login (e.g. Gmail). Empty = use account email. */
     smtpUser: { type: String, trim: true, lowercase: true, default: "" },

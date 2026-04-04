@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { cn } from '../../utils/cn';
 
 const fieldBase =
@@ -19,15 +20,18 @@ export function Label({ children, htmlFor, className }) {
   );
 }
 
-export default function Input({ className, id, ...props }) {
+const Input = forwardRef(function Input({ className, id, ...props }, ref) {
   return (
     <input
+      ref={ref}
       id={id}
       className={cn(fieldBase, inputExtra, className)}
       {...props}
     />
   );
-}
+});
+
+export default Input;
 
 export function TextArea({ className, id, rows = 4, ...props }) {
   return (

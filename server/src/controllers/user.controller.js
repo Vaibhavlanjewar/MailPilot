@@ -13,6 +13,17 @@ const GMAIL_SCOPES = [
   "openid",
 ];
 
+function isStrongPassword(password) {
+  const value = String(password || "");
+  return (
+    value.length >= 8 &&
+    /[a-z]/.test(value) &&
+    /[A-Z]/.test(value) &&
+    /\d/.test(value) &&
+    /[^A-Za-z0-9]/.test(value)
+  );
+}
+
 function getGmailOauthClient() {
   const { clientId, clientSecret, redirectUri } = env.email.gmail;
   if (!clientId || !clientSecret || !redirectUri) {
@@ -150,8 +161,11 @@ export async function changePassword(req, res, next) {
     if (!currentPassword || !newPassword) {
       throw new AppError("currentPassword and newPassword are required", 422);
     }
-    if (newPassword.length < 8) {
-      throw new AppError("newPassword must be at least 8 characters", 422);
+    if (!isStrongPassword(newPassword)) {
+      throw new AppError(
+        "newPassword must be at least 8 chars and include uppercase, lowercase, number, and special character",
+        422,
+      );
     }
 
     const user = await User.findById(req.userId).select("+passwordHash");
