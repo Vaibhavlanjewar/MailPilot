@@ -43,7 +43,7 @@ Job seekers usually face these issues:
 - Campaign creation, scheduling, and send queue.
 - Async worker architecture for reliable high-volume sending.
 - Email-open tracking and analytics summary.
-- Sender configuration from settings (SMTP/Gmail OAuth).
+- Smart Email Scheduling with Timezone Optimization
 
 ## 5. High-Level Architecture
 
@@ -131,10 +131,11 @@ MailPilot uses a client-server + queue-worker design:
 
 - Supports flexible sender setups across users.
 
-### OpenAI (Optional)
+### AI Assistant for Template Customization (Upcoming)
 
-- Speeds up template creation with AI prompts.
-- Has deterministic fallback when API key is not configured.
+- AI-powered template generation tailored to job descriptions.
+- Accelerates content creation with prompt-based customization.
+- Ensures system reliability via deterministic fallback without API dependency.
 
 ## 9. Complete Project Structure
 
