@@ -8,6 +8,27 @@ import { api } from '../services/api';
 import { mapCampaignToTableRow } from '../utils/campaignMappers';
 import { formatDate, formatNumber, formatPercent } from '../utils/format';
 
+function MailIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M4 7l8 6 8-6" />
+    </svg>
+  );
+}
+
+function BulkSendArrowIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden {...props}>
+      <path d="M3 12h12" />
+      <path d="M11 7l5 5-5 5" />
+      <path d="M18 8h3" />
+      <path d="M18 12h3" />
+      <path d="M18 16h3" />
+    </svg>
+  );
+}
+
 function SendVolumeChart({ series }) {
   const peak = Math.max(...series.map((item) => item.total || item.sent || 0), 1);
 
@@ -226,13 +247,13 @@ export default function Dashboard() {
             <h3 className="text-sm font-semibold text-slate-900">Quick actions</h3>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
               <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
+                <MailIcon className="h-4 w-4 text-brand-600" />
                 <LinkButton to="/app/contacts" variant="ghost" className="!p-0 !shadow-none">
                   Import contacts (CSV)
                 </LinkButton>
               </li>
               <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
+                <BulkSendArrowIcon className="h-4 w-4 text-brand-600" />
                 <LinkButton to="/app/campaigns/new" variant="ghost" className="!p-0 !shadow-none">
                   New campaign
                 </LinkButton>

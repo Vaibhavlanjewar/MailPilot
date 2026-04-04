@@ -77,6 +77,10 @@ export const env = {
     ),
   },
   apiRateLimitMax: Number(process.env.API_RATE_LIMIT_MAX) || 200,
+  ai: {
+    openaiApiKey: process.env.OPENAI_API_KEY || '',
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  },
 };
 
 export function assertEnv() {

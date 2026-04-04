@@ -5,6 +5,7 @@ function normalizeText(value) {
 function getRecipientNameParts(recipient) {
   const rawName = normalizeText(recipient?.name);
   const email = normalizeText(recipient?.email).toLowerCase();
+  const company = normalizeText(recipient?.company) || 'your organization';
   const fallback = email ? email.split('@')[0] : '';
   const displayName = rawName || fallback;
   const parts = displayName.split(/\s+/).filter(Boolean);
@@ -13,14 +14,15 @@ function getRecipientNameParts(recipient) {
     firstName: parts[0] || fallback,
     lastName: parts.length > 1 ? parts.slice(1).join(' ') : '',
     email,
+    company,
   };
 }
 
 /**
  * Replace simple recipient tokens in strings and HTML.
- * Supported tokens: {{name}}, {{full_name}}, {{first_name}}, {{last_name}}, {{email}}.
+ * Supported tokens: {{name}}, {{full_name}}, {{first_name}}, {{last_name}}, {{email}}, {{company}}.
  * @param {string | undefined | null} template
- * @param {{ name?: string, email?: string } | null | undefined} recipient
+ * @param {{ name?: string, email?: string, company?: string } | null | undefined} recipient
  * @returns {string}
  */
 export function renderRecipientTemplate(template, recipient) {
@@ -34,6 +36,7 @@ export function renderRecipientTemplate(template, recipient) {
     first_name: vars.firstName,
     last_name: vars.lastName,
     email: vars.email,
+    company: vars.company,
   };
 
   return input.replace(/{{\s*([a-z_]+)\s*}}/gi, (_match, token) => {

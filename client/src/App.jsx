@@ -8,6 +8,7 @@ import CreateCampaign from './pages/CreateCampaign';
 import CampaignDetail from './pages/CampaignDetail';
 import Contacts from './pages/Contacts';
 import Templates from './pages/Templates';
+import TemplateEditor from './pages/TemplateEditor';
 import Analytics from './pages/Analytics';
 import EmailTracking from './pages/EmailTracking';
 import Settings from './pages/Settings';
@@ -35,6 +36,8 @@ export default function App() {
           <Route path="campaigns/new" element={<CreateCampaign />} />
           <Route path="contacts" element={<Contacts />} />
           <Route path="templates" element={<Templates />} />
+          <Route path="templates/new" element={<TemplateEditor />} />
+          <Route path="templates/:id/edit" element={<TemplateEditor />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="email-tracking" element={<EmailTracking />} />
           <Route path="settings" element={<Settings />} />

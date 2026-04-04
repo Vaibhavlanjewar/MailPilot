@@ -1,21 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Card, { CardHeader } from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import Button from '../components/ui/Button';
-import Input, { Label, TextArea } from '../components/ui/Input';
-import HtmlPreview, { HtmlViewModeToggle } from '../components/HtmlPreview';
 import { PageLoader } from '../components/ui/LoadingSpinner';
 import { api } from '../services/api';
 import { formatDate } from '../utils/format';
 
 export default function Templates() {
-  const [name, setName] = useState('');
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
-  const [bodyView, setBodyView] = useState('edit');
-  const [editingId, setEditingId] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
@@ -38,57 +29,12 @@ export default function Templates() {
     load();
   }, [load]);
 
-  function resetForm() {
-    setName('');
-    setSubject('');
-    setBody('');
-    setEditingId(null);
-    setBodyView('edit');
-  }
-
-  function startEdit(row) {
-    setEditingId(row._id);
-    setName(row.name);
-    setSubject(row.subject);
-    setBody(row.body || '');
-    setBodyView('edit');
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!name.trim() || !subject.trim()) return;
-    setSaving(true);
-    setError(null);
-    try {
-      if (editingId) {
-        await api.patch(`/templates/${editingId}`, {
-          name: name.trim(),
-          subject: subject.trim(),
-          body: body.trim(),
-        });
-      } else {
-        await api.post('/templates', {
-          name: name.trim(),
-          subject: subject.trim(),
-          body: body.trim(),
-        });
-      }
-      resetForm();
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save template');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleDelete(id) {
     if (!window.confirm('Delete this template?')) return;
     setDeletingId(id);
     setError(null);
     try {
       await api.delete(`/templates/${id}`);
-      if (String(editingId) === String(id)) resetForm();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete');
@@ -111,15 +57,16 @@ export default function Templates() {
       className: 'w-44 text-right',
       render: (row) => (
         <div className="flex flex-wrap justify-end gap-1.5">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={Boolean(deletingId)}
-            onClick={() => startEdit(row)}
-          >
-            Edit
-          </Button>
+          <Link to={`/app/templates/${row._id}/edit`}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={Boolean(deletingId)}
+            >
+              Edit
+            </Button>
+          </Link>
           <Button
             type="button"
             variant="danger"
@@ -137,105 +84,30 @@ export default function Templates() {
   if (loading && rows.length === 0) return <PageLoader />;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-5">
-      <div className="space-y-4 lg:col-span-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-slate-900">Library</h2>
-          <Link
-            to="/app/campaigns/new"
-            className="text-sm font-medium text-brand-600 hover:text-brand-700"
-          >
-            New campaign →
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-app bg-app-surface shadow-app-soft">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border px-5 py-4 sm:px-6">
+          <h2 className="text-base font-semibold text-app">Templates</h2>
+          <Link to="/app/templates/new">
+            <Button type="button" variant="secondary">
+              Add New Template
+            </Button>
           </Link>
         </div>
-        {error && (
-          <div className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-900">
-            {error}
-          </div>
-        )}
-        <DataTable
-          columns={columns}
-          rows={rows.map((t) => ({ ...t, id: t._id }))}
-          loading={loading}
-          emptyMessage="No templates yet. Create one on the right — then pick it in campaign step 3."
-        />
-      </div>
-      <div className="lg:col-span-2">
-        <Card>
-          <CardHeader
-            title={editingId ? 'Edit template' : 'New template'}
-            description={
-              editingId
-                ? 'Update name, subject, or HTML body. Preview shows how recipients will see it.'
-                : 'Subject and body are used when you choose this template while creating a campaign. Use {{name}}, {{first_name}}, or {{email}} for personalization.'
-            }
+        <div className="p-4 sm:p-6">
+          <DataTable
+            columns={columns}
+            rows={rows.map((t) => ({ ...t, id: t._id }))}
+            loading={loading}
+            emptyMessage="No templates yet. Create one and then pick it in campaign step 3."
           />
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="tpl-name">Name</Label>
-              <Input
-                id="tpl-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Welcome email"
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="tpl-subject">Default subject</Label>
-              <Input
-                id="tpl-subject"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Welcome to {{company}}"
-                required
-              />
-            </div>
-            <div>
-              <div className="mb-1.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <Label htmlFor="tpl-body" className="mb-0">
-                  Body (HTML)
-                </Label>
-                <HtmlViewModeToggle value={bodyView} onChange={setBodyView} />
-              </div>
-              {bodyView === 'edit' ? (
-                <TextArea
-                  id="tpl-body"
-                  rows={10}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder="<p>Hi there,</p><p>…</p>"
-                />
-              ) : (
-                <HtmlPreview
-                  html={body}
-                  minHeight="280px"
-                  emptyMessage="Switch to Edit HTML and add markup to see a preview."
-                />
-              )}
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button type="submit" disabled={saving}>
-                {saving
-                  ? 'Saving…'
-                  : editingId
-                    ? 'Save changes'
-                    : 'Create template'}
-              </Button>
-              {editingId ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={resetForm}
-                  disabled={saving}
-                >
-                  Cancel edit
-                </Button>
-              ) : null}
-            </div>
-          </form>
-        </Card>
+        </div>
       </div>
+      {error && (
+        <div className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          {error}
+        </div>
+      )}
     </div>
   );
 }
