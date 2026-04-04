@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Card, { CardHeader } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Input, { Label } from "../components/ui/Input";
+import PasswordInput from "../components/ui/PasswordInput";
 import { api } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -192,9 +193,8 @@ export default function Settings() {
         <form onSubmit={handleChangePassword} className="space-y-5">
           <div>
             <Label htmlFor="currentPassword">Current password</Label>
-            <Input
+            <PasswordInput
               id="currentPassword"
-              type="password"
               autoComplete="current-password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -204,9 +204,8 @@ export default function Settings() {
 
           <div>
             <Label htmlFor="newPassword">New password</Label>
-            <Input
+            <PasswordInput
               id="newPassword"
-              type="password"
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}

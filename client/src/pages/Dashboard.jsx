@@ -161,7 +161,7 @@ export default function Dashboard() {
   }, [analytics?.recentCampaigns, campaigns]);
 
   const recentRows = useMemo(
-    () => campaigns.slice(0, 5).map(mapCampaignToTableRow),
+    () => campaigns.slice(0, 3).map(mapCampaignToTableRow),
     [campaigns]
   );
 

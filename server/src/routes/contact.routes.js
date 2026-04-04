@@ -18,6 +18,17 @@ router.post(
 );
 
 router.patch(
+  '/:id',
+  authenticate,
+  param('id').isMongoId().withMessage('invalid contact id'),
+  body('email').optional({ nullable: true }).isEmail().withMessage('email must be a valid email address'),
+  body('name').optional({ nullable: true }).isString().withMessage('name must be a string'),
+  body('company').optional({ nullable: true }).isString().withMessage('company must be a string'),
+  validateRequest,
+  contactController.updateContact,
+);
+
+router.patch(
   '/:id/subscription',
   authenticate,
   param('id').isMongoId().withMessage('invalid contact id'),

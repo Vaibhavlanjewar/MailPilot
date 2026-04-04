@@ -339,6 +339,25 @@
     border-top-color: var(--primary) !important;
   }
 
+
+.Toastify__toast-container {
+  width: min(320px, calc(100vw - 1rem));
+}
+
+.toast-compact {
+  min-height: 34px !important;
+  margin-bottom: 0.4rem !important;
+  border-radius: 9999px !important;
+  padding: 0 !important;
+  box-shadow: var(--soft-shadow) !important;
+}
+
+.toast-compact-body {
+  margin: 0 !important;
+  padding: 0.4rem 0.75rem !important;
+  font-size: 0.78rem !important;
+  line-height: 1.15 !important;
+}
   .ring-brand-500\/20 {
     --tw-ring-color: var(--focus-ring) !important;
   }

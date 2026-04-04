@@ -183,6 +183,93 @@ export async function updateContactSubscription(req, res, next) {
         id: contact._id.toString(),
         email: contact.email,
         name: contact.name || '',
+        company: contact.company || '',
+        subscribed: contact.subscribed !== false,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateContact(req, res, next) {
+  try {
+    const hasName = Object.prototype.hasOwnProperty.call(req.body || {}, 'name');
+    const hasEmail = Object.prototype.hasOwnProperty.call(req.body || {}, 'email');
+    const hasCompany = Object.prototype.hasOwnProperty.call(req.body || {}, 'company');
+
+    const rawName = hasName && typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const rawEmail = hasEmail && typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const rawCompany = hasCompany && typeof req.body?.company === 'string' ? req.body.company.trim() : '';
+
+    if (!hasName && !hasEmail && !hasCompany) {
+      throw new AppError('At least one contact field is required', 400);
+    }
+
+    const contactId = req.params.id;
+    const existing = await Contact.findOne({ _id: contactId, userId: req.userId }).lean();
+    if (!existing) {
+      throw new AppError('Contact not found', 404);
+    }
+
+    if (hasEmail && !validator.isEmail(rawEmail)) {
+      throw new AppError('email must be a valid email address', 422);
+    }
+
+    if (hasEmail && rawEmail !== String(existing.email || '').trim().toLowerCase()) {
+      const emailCollision = await Contact.findOne({
+        _id: { $ne: contactId },
+        userId: req.userId,
+        email: rawEmail,
+      })
+        .select('_id')
+        .lean();
+
+      if (emailCollision) {
+        throw new AppError('Email already present in client list', 409);
+      }
+    }
+
+    if (hasName && rawName) {
+      const normalizedName = rawName.toLowerCase();
+      const nameCollision = await Contact.findOne({
+        _id: { $ne: contactId },
+        userId: req.userId,
+        name: { $exists: true, $ne: '' },
+      })
+        .select('name')
+        .lean();
+
+      if (
+        nameCollision &&
+        String(nameCollision.name || '').trim().toLowerCase() === normalizedName
+      ) {
+        throw new AppError('Name already present in client list', 409);
+      }
+    }
+
+    const update = {
+      ...(hasEmail ? { email: rawEmail } : {}),
+      ...(hasName ? { name: rawName } : {}),
+      ...(hasCompany ? { company: rawCompany } : {}),
+    };
+
+    const contact = await Contact.findOneAndUpdate(
+      { _id: contactId, userId: req.userId },
+      { $set: update },
+      { new: true },
+    ).lean();
+
+    if (!contact) {
+      throw new AppError('Contact not found', 404);
+    }
+
+    res.json({
+      contact: {
+        id: contact._id.toString(),
+        email: contact.email,
+        name: contact.name || '',
+        company: contact.company || '',
         subscribed: contact.subscribed !== false,
       },
     });
