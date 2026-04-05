@@ -14,7 +14,7 @@ const emailLogSchema = new mongoose.Schema(
       required: true,
     },
     toEmail: { type: String, required: true, lowercase: true },
-    trackingToken: { type: String, default: '' },
+    trackingToken: { type: String, default: undefined },
     opened: { type: Boolean, default: false, index: true },
     openCount: { type: Number, default: 0 },
     openHistory: { type: [Date], default: [] },

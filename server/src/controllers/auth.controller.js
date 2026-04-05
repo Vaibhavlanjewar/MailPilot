@@ -469,7 +469,9 @@ export async function googleOauthCallback(req, res, next) {
       return res.redirect(frontendGoogleCallbackUrl({ error: 'Google account email is missing' }));
     }
 
-    const existingUser = await User.findOne({ email }).select('_id email name smtpUser gmailRefreshTokenEnc');
+    const existingUser = await User.findOne({ email }).select(
+      '_id email name smtpUser gmailRefreshTokenEnc isVerified',
+    );
 
     if (!existingUser && !tokens.refresh_token) {
       return res.redirect(
@@ -503,7 +505,7 @@ export async function googleOauthCallback(req, res, next) {
         user.smtpUser = email;
         changed = true;
       }
-      if (user.isVerified === false) {
+      if (user.isVerified !== true) {
         user.isVerified = true;
         changed = true;
       }
