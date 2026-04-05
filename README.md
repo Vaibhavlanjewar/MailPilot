@@ -1,4 +1,4 @@
-# MailPilot
+﻿# MailPilot
 
 MailPilot helps job seekers send personalized cold emails in bulk, automatically, within minutes.
 
@@ -136,6 +136,7 @@ MailPilot uses a client-server + queue-worker design:
 - AI-powered template generation tailored to job descriptions.
 - Accelerates content creation with prompt-based customization.
 - Ensures system reliability via deterministic fallback without API dependency.
+
 ## 9. Complete Project Structure
 
 ```text
