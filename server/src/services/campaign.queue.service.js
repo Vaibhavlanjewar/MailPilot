@@ -149,6 +149,9 @@ export async function enqueueCampaignSend(campaignId, userId, options = {}) {
     logger.error("EmailLog insertMany failed", {
       campaignId,
       message: err instanceof Error ? err.message : String(err),
+      code: err?.code,
+      keyPattern: err?.keyPattern,
+      keyValue: err?.keyValue,
     });
     throw new AppError(
       "Could not queue campaign emails. Please try again.",
