@@ -57,11 +57,13 @@ export async function processEmailJob(job) {
     )
     .lean();
   if (!owner) {
+    const accountMissingMessage =
+      "Campaign owner account missing. Please log in again and recreate this campaign.";
     await EmailLog.findByIdAndUpdate(emailLogId, {
       status: "failed",
-      error: "Account missing",
+      error: accountMissingMessage,
     });
-    throw new UnrecoverableError("Account missing");
+    throw new UnrecoverableError(accountMissingMessage);
   }
   const from = resolveCampaignFrom(owner);
   const recipient = contact || { name: "", email: log.toEmail, company: "" };
