@@ -108,7 +108,19 @@ export const env = {
   ai: {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    googleApiKey: process.env.GOOGLE_API_KEY || '',
+    langsmith: {
+      tracing: process.env.LANGSMITH_TRACING === 'true',
+      endpoint: process.env.LANGSMITH_ENDPOINT || 'https://api.smith.langchain.com',
+      apiKey: process.env.LANGSMITH_API_KEY || '',
+      project: process.env.LANGSMITH_PROJECT || 'vaibhav-ai',
+    }
   },
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID || 'mailpilot-e0424',
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL || 'firebase-adminsdk-fbsvc@mailpilot-e0424.iam.gserviceaccount.com',
+    privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
+  }
 };
 
 export function assertEnv() {

@@ -1,0 +1,43 @@
+# Implementation Plan - Job Search Tool & PDF/Docx Resume Upload
+
+This plan outlines the changes to integrate resume text extraction (PDF/DOCX) in the AI Recruiter interface, add a Job Search Dashboard, and docu-log changes to `vaibhav.md`.
+
+## Proposed Changes
+
+### Documentation
+#### [NEW] [vaibhav.md](file:///c:/Users/vlanj/OneDrive/Desktop/MailPilot/vaibhav.md)
+* Create `vaibhav.md` at the root of the project.
+* Detail the exact changes done so far (OTP Fallback, environment setup, AI Recruiter template optimizer page, and comparison details between Gemini and Ollama).
+
+---
+
+### AI Recruiter Resume Upload
+We want to extract text from PDF and DOCX files directly. Rather than adding heavy native C bindings (like pdf-parse) on Windows that could fail during backend compilation, we will handle this efficiently in the client browser using lightweight CDN-loaded libraries or standard array buffers:
+* **PDF Reader:** We can dynamically load `pdfjs-dist` from a CDN (or bundle it) globally to parse PDF page-by-page.
+* **DOCX Reader:** We will use `mammoth` (a lightweight JS library) loaded dynamically from unpkg/cdnjs to extract raw text content from `.docx` files.
+
+#### [MODIFY] [AiAssistant.jsx](file:///c:/Users/vlanj/OneDrive/Desktop/MailPilot/client/src/pages/AiAssistant.jsx)
+* Add support for file types `.pdf`, `.docx` in the file input.
+* Implement dynamic script loaders for `pdfjs-dist` and `mammoth` (or direct client-side parsing utilities) to extract raw text from selected files and populate the Resume text box.
+
+---
+
+### Job Search Page
+#### [NEW] [JobSearch.jsx](file:///c:/Users/vlanj/OneDrive/Desktop/MailPilot/client/src/pages/JobSearch.jsx)
+* Create a interactive Job Search interface with filter items (Location: Pune, Mumbai, Bangalore, Hyderabad, Noida, Remote/Hybrid/Onsite).
+* Each job item should display details (Title, Location, Remote/Hybrid/On-site tags, Apply link/id, and a Quick link to contact the respective Recruiter on LinkedIn).
+* Give a polished, premium card layout matching MailPilot's theme.
+
+#### [MODIFY] [App.jsx](file:///c:/Users/vlanj/OneDrive/Desktop/MailPilot/client/src/App.jsx)
+* Register route `/app/job-search` pointing to `JobSearch.jsx`.
+
+#### [MODIFY] [Sidebar.jsx](file:///c:/Users/vlanj/OneDrive/Desktop/MailPilot/client/src/components/layout/Sidebar.jsx)
+* Add the **Job Search** link to the sidebar navigator under the Templates/AI sections.
+
+---
+
+## Verification Plan
+
+### Manual Verification
+* Access `localhost:5173/app/ai-assistant`, upload sample `.pdf`/`.docx` files and verify text populates the resume box successfully.
+* Access `localhost:5173/app/job-search`, test location and style filters, and review links.

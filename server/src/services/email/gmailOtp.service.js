@@ -1,6 +1,8 @@
 import { google } from "googleapis";
+import nodemailer from "nodemailer";
 import { env } from "../../config/env.js";
 import { AppError } from "../../utils/AppError.js";
+import { logger } from "../../utils/logger.js";
 
 function toBase64Url(input) {
   return Buffer.from(input)
@@ -51,7 +53,7 @@ function buildOtpEmail({ to, otp }) {
   ].join("\n");
 
   return [
-    `From: MailPilot <${env.email.otpGmail.senderEmail}>`,
+    `From: MailPilot <${env.email.otpGmail.senderEmail || "noreply@example.com"}>`,
     `To: ${to}`,
     "MIME-Version: 1.0",
     `Subject: ${subject}`,
@@ -62,13 +64,62 @@ function buildOtpEmail({ to, otp }) {
 }
 
 export async function sendOtpEmail({ to, otp }) {
-  const { oauth2Client } = getOtpClient();
-  const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+  const { clientId, clientSecret, redirectUri, refreshToken, senderEmail } =
+    env.email.otpGmail;
 
-  const raw = toBase64Url(buildOtpEmail({ to, otp }));
+  const hasGmailConfig =
+    clientId && clientSecret && redirectUri && refreshToken && senderEmail;
 
-  await gmail.users.messages.send({
-    userId: "me",
-    requestBody: { raw },
-  });
+  if (hasGmailConfig) {
+    try {
+      const { oauth2Client } = getOtpClient();
+      const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+      const raw = toBase64Url(buildOtpEmail({ to, otp }));
+      await gmail.users.messages.send({
+        userId: "me",
+        requestBody: { raw },
+      });
+      logger.info(`OTP email sent via Gmail API to ${to}`);
+      return;
+    } catch (err) {
+      logger.error("Failed to send OTP via Gmail API", { error: err.message });
+      // Proceed to fallbacks
+    }
+  }
+
+  // Fallback 1: SMTP email host is configured
+  if (env.email.smtp.host) {
+    try {
+      const { host, port, secure, user, pass } = env.email.smtp;
+      const hasAuth = Boolean(user && pass);
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: hasAuth ? { user, pass } : undefined,
+      });
+      await transporter.sendMail({
+        from: env.email.from,
+        to,
+        subject: "MailPilot OTP Verification",
+        text: `Your OTP is: ${otp}\nThis OTP is valid for 5 minutes.`,
+      });
+      logger.info(`OTP email sent via SMTP to ${to}`);
+      return;
+    } catch (err) {
+      logger.error("Failed to send OTP via SMTP fallback", { error: err.message });
+      // Proceed to local dev fallback
+    }
+  }
+
+  // Fallback 2: Local development/testing console logging
+  if (env.nodeEnv !== "production") {
+    logger.warn(`📬 [DEVELOPMENT FALLBACK] Verification OTP for ${to} is: ${otp}`);
+    return;
+  }
+
+  throw new AppError(
+    "Missing Gmail API OTP configuration or SMTP fallback.",
+    503,
+  );
 }

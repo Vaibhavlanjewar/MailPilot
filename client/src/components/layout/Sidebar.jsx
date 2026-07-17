@@ -8,6 +8,13 @@ const nav = [
   { to: '/app/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
   { to: '/app/contacts', label: 'Contacts', icon: UsersIcon },
   { to: '/app/templates', label: 'Templates', icon: DocumentIcon },
+  { to: '/app/ai-assistant', label: 'AI Recruiter', icon: SparklesIcon },
+  { to: '/app/job-search', label: 'Job Search', icon: BriefcaseIcon },
+  { to: '/app/interview-prep', label: 'Interview Prep', icon: AcademicCapIcon },
+  { to: '/app/post-job', label: 'Post a Job', icon: DocumentPlusIcon },
+  { to: '/app/community', label: 'Discussion Forum', icon: ChatBubbleIcon },
+  { to: '/app/resume-builder', label: 'Resume Builder', icon: DocumentTextIcon },
+  { to: '/app/resume-rag', label: 'Resume Chat (RAG)', icon: ChatQuestionIcon },
   { to: '/app/analytics', label: 'Analytics', icon: ChartIcon },
   { to: '/app/email-tracking', label: 'Email Tracking', icon: TrackingIcon },
   { to: '/app/settings', label: 'Settings', icon: CogIcon },
@@ -166,6 +173,62 @@ function FeedbackIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3h6m-9.75 8.25L5.1 15.9a2.25 2.25 0 011.591-.659h10.56A2.25 2.25 0 0019.5 13V6.75A2.25 2.25 0 0017.25 4.5H6.75A2.25 2.25 0 004.5 6.75v10.5A2.25 2.25 0 006.75 19.5z" />
+    </svg>
+  );
+}
+
+function SparklesIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3 15l5.096-.813L9 9l.813 5.187L15 15l-5.187.904zM18 5.25L17.25 9l-.75-3.75L12.75 4.5l3.75-.75L17.25 0l.75 3.75 3.75.75-3.75.75zM20.25 15.75l-.563 2.813-2.813.563 2.813.563.563 2.813.563-2.813 2.813-.563-2.813-.563-.563-2.813z" />
+    </svg>
+  );
+}
+
+function BriefcaseIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 .621-.504 1.125-1.125 1.125H4.875A1.125 1.125 0 013.75 18.4V14.15m16.5 0a9.003 9.003 0 00-16.5 0m16.5 0L19.5 11.25H4.5L3.75 14.15M15 8.25V5.25c0-.621-.504-1.125-1.125-1.125h-3.75c-.621 0-1.125.504-1.125 1.125v3M3.375 7.5h17.25c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125H3.375A1.125 1.125 0 012.25 10.125v-1.5c0-.621.504-1.125 1.125-1.125z" />
+    </svg>
+  );
+}
+
+function AcademicCapIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.62 48.62 0 0112 20.9c4.956-1.936 8.23-6.662 8.23-11.89m-16.46 0A12.012 12.012 0 0112 3c1.933 0 3.702.458 5.27 1.258m-13.01 5.89h10.56" />
+    </svg>
+  );
+}
+
+function DocumentPlusIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function ChatBubbleIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3h6m-9.75 8.25L5.1 15.9a2.25 2.25 0 011.591-.659h10.56a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0017.25 4.5H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25z" />
+    </svg>
+  );
+}
+
+function DocumentTextIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+    </svg>
+  );
+}
+
+function ChatQuestionIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 18a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 13.517 3 11.856 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
     </svg>
   );
 }

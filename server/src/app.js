@@ -14,6 +14,8 @@ import analyticsRoutes from "./routes/analytics.routes.js";
 import templateRoutes from "./routes/template.routes.js";
 import emailTrackingRoutes from "./routes/emailTracking.routes.js";
 import trackingRoutes from "./routes/tracking.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
+import resumeRoutes from "./routes/resume.routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
 const app = express();
@@ -169,6 +171,8 @@ app.use("/api/email-tracking", emailTrackingRoutes);
 app.use("/api/campaign", campaignRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/templates", templateRoutes);
+app.use("/api/ai", aiRoutes);
+app.use("/api/resumes", resumeRoutes);
 app.use("/track", trackingRoutes);
 
 // ✅ Serve frontend

@@ -1,0 +1,199 @@
+# MailPilot Codebase Analysis & Contribution Guide
+
+MailPilot is a web application designed to help job seekers and professionals send personalized cold emails in bulk, automatically, using structured templates, contact lists, and asynchronous queue-based sending.
+
+---
+
+## 1. Tech Stack Overview
+
+### Frontend
+- **Framework & Tooling:** React 18 with Vite (SPA layout).
+- **Navigation:** React Router v6.
+- **Styling:** CSS + Tailwind CSS (configured under [client/tailwind.config.js](file:///c:/Users/vlanj/OneDrive/Desktop/MailPilot/client/tailwind.config.js)).
+- **HTTP Client:** Axios for API communication.
+- **Notifications:** React Toastify.
+
+### Backend & Infrastructure
+- **Runtime:** Node.js (with ES Modules, `"type": "module"`).
+- **Framework:** Express for REST APIs.
+- **Database:** MongoDB via Mongoose.
+- **Background Worker & Jobs:** Redis-backed queues using BullMQ.
+- **Emails:** Nodemailer (SMTP and Gmail integration via Google APIs oauth2).
+
+---
+
+## 2. Directory Structure & Key Components
+
+```text
+MailPilot/
+├── package.json         # Root configuration utilizing npm Workspaces (client, server)
+├── client/              # React SPA frontend
+│   ├── src/
+│   │   ├── main.jsx     # Frontend entry point
+│   │   ├── App.jsx      # Routes definition (auth pages, protected dashboard layouts)
+│   │   ├── components/  # Layout and shared UI elements
+│   │   ├── pages/       # Layouts like Landing, Dashboard, Templates, Campaigns, etc.
+│   │   └── services/    # Axios API wrappers
+│   └── tailwind.config.js
+└── server/              # Express API and BullMQ worker
+    ├── src/
+    │   ├── server.js    # Entry file (checks environment, connects DB/Redis, starts worker & server)
+    │   ├── app.js       # App definition (cors, helmet, route handlers, error fallback)
+    │   ├── config/      # Environment variables, Redis client, database connections
+    │   ├── controllers/ # Request controllers (auth, user, contacts, campaigns, templates, analytics)
+    │   ├── jobs/        # BullMQ worker process executing sending jobs
+    │   ├── models/      # Mongoose models definitions
+    │   ├── queues/      # Queue definitions & job dispatchers
+    │   └── routes/      # Server routes (/api/auth, /api/campaign, etc.)
+    └── .env.example     # Configuration template
+```
+
+---
+
+## 3. Core Database Models
+
+- **`User`**: Tracks name, email, password hash, verification status (`isVerified`), and settings (e.g., mail sending delays, Gmail API credentials, signature).
+- **`Contact`**: Recipient info (email, name, company, role, associated user, and subscription status).
+- **`Template`**: HTML and plain text drafts containing personalization variables like `{{name}}` or `{{company}}`.
+- **`Campaign`**: Connects a name, subject, template/content, a list of contacts, and scheduling info. Tracks execution status (`pending`, `processing`, `completed`) and overall statistics (`sent`, `failed`, `total`).
+- **`EmailLog`**: Record of each individual email sent. Tracks recipient, sending status (`queued`, `sent`, `failed`, `opened`), retry attempts, and the signed tracking token.
+- **`Otp`**: Handles temporary one-time passwords for email verification and forgot-password flows (with expiration times).
+
+---
+
+## 4. Key Workflows
+
+### A. Authentication & Verification
+```mermaid
+sequenceDiagram
+  autonumber
+  participant User
+  participant Frontend
+  participant Backend (Auth API)
+  participant MongoDB
+  participant Mailer (SMTP/Gmail)
+
+  User->>Frontend: Enter credentials
+  Frontend->>Backend (Auth API): POST /api/auth/register
+  Backend (Auth API)->>MongoDB: Save unverified user + OTP
+  Backend (Auth API)->>Mailer: Send verification OTP email
+  Backend (Auth API)-->>Frontend: Response (requires OTP verification)
+  Frontend->>Frontend: Redirect to /verify-otp
+  User->>Frontend: Enter OTP code
+  Frontend->>Backend (Auth API): POST /api/auth/verify-otp
+  Backend (Auth API)->>MongoDB: Update user.isVerified = true
+  Backend (Auth API)-->>Frontend: Auth Token (JWT)
+```
+
+### B. Campaign Send & In-Flight Tracking
+```mermaid
+sequenceDiagram
+  autonumber
+  participant User
+  participant Frontend
+  participant Backend (Campaign API)
+  participant Queue (Redis/BullMQ)
+  participant Worker (Background Proc)
+  participant Recipient (Mail Client)
+
+  User->>Frontend: Click "Send Campaign"
+  Frontend->>Backend (Campaign API): POST /api/campaign/send/:id
+  Backend (Campaign API)->>MongoDB: Create EmailLogs (state: queued)
+  Backend (Campaign API)->>Queue (Redis/BullMQ): Add jobs for each recipient
+  Backend (Campaign API)-->>Frontend: Respond "Campaign processing"
+  
+  loop Process Queue Jobs
+    Worker (Background Proc)->>Queue (Redis/BullMQ): Pull job
+    Worker (Background Proc)->>MongoDB: Fetch campaign & contact details
+    Worker (Background Proc)->>Worker (Background Proc): Replace placeholders + inject 1x1 Tracking Pixel
+    Worker (Background Proc)->>Recipient (Mail Client): Deliver email
+    Worker (Background Proc)->>MongoDB: Update EmailLog (sent) & Campaign stats
+  end
+```
+
+---
+
+## 5. Git & Contribution Workflow
+
+Since you forked from your friend's repository, your local Git state is set up as follows:
+- **`origin`**: Your repository clone (`https://github.com/Vaibhavlanjewar/MailPilot.git`). This is where you have push access.
+- **`upstream`**: Your friend's original repository (`https://github.com/pnkjshahare/MailPilot.git`). This is where the source code originates from.
+
+To manage contributions neatly without git conflicts, follow this workflow:
+
+### 1. Sync Your Fork with Upstream Changes
+Before starting any new feature or fix, pull the latest changes from the original (upstream) repo:
+```bash
+# 1. Fetch all upstream branches
+git fetch upstream
+
+# 2. Make sure you are on the main branch
+git checkout main
+
+# 3. Merge the changes from upstream/main into your local main branch
+git merge upstream/main
+
+# 4. Push the updated main to your personal GitHub origin
+git push origin main
+```
+
+### 2. Create a Feature/Topic Branch
+Never work directly on the `main` branch. Create a descriptive branch for your changes:
+```bash
+git checkout -b feature/your-feature-name
+# or
+git checkout -b fix/bug-description
+```
+
+### 3. Develop & Stage Changes
+Make your code changes, and test locally (see Local Setup below). Once verified:
+```bash
+# Check modified files
+git status
+
+# Stage the file changes
+git add .
+
+# Commit with a descriptive message
+git commit -m "feat: implement AI template generation with smart fallback"
+```
+
+### 4. Push to Your Fork
+Push your branch to your own GitHub repository (`origin`):
+```bash
+git push -u origin feature/your-feature-name
+```
+
+### 5. Submit a Pull Request (PR)
+1. Go to your repository on GitHub: `https://github.com/Vaibhavlanjewar/MailPilot`.
+2. A banner will pop up suggesting you create a **Pull Request**.
+3. Set the base repository to `pnkjshahare/MailPilot` (branch: `main`) and the head repository to your fork `Vaibhavlanjewar/MailPilot` (branch: `feature/your-feature-name`).
+4. Describe your changes clearly and submit the PR for your friend to review.
+
+---
+
+## 6. How to Run Locally
+
+### Prerequisites
+1. Installed **Node.js** (v18+) and **npm**.
+2. **Docker Desktop** installed and running (used to quickly launch MongoDB and Redis).
+
+### Step-by-Step Setup
+1. **Install Dependencies:**
+   In the root folder, run:
+   ```bash
+   npm install
+   ```
+2. **Launch Infrastructure (Database & Queue Store):**
+   ```bash
+   npm run docker:up
+   ```
+   This will spin up MongoDB and Redis in Docker containers.
+3. **Configure Environment Variables:**
+   - Copy [server/.env.example](file:///c:/Users/vlanj/OneDrive/Desktop/MailPilot/server/.env.example) to `server/.env`.
+   - Update values (e.g. SMTP config, Gmail config, JWT secrets).
+4. **Run the Application:**
+   ```bash
+   npm run dev
+   ```
+   This command uses `concurrently` to run both the frontend developer client (Vite at port `5173`) and the backend API server (Express at port `4000`) simultaneously.

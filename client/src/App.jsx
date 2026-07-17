@@ -21,6 +21,13 @@ import GoogleLoginCallback from './pages/GoogleLoginCallback';
 import VerifyOtp from './pages/VerifyOtp';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import AiAssistant from './pages/AiAssistant';
+import JobSearch from './pages/JobSearch';
+import InterviewPrep from './pages/InterviewPrep';
+import PostJob from './pages/PostJob';
+import Community from './pages/Community';
+import ResumeBuilder from './pages/ResumeBuilder';
+import ResumeRag from './pages/ResumeRag';
 
 export default function App() {
   return (
@@ -44,8 +51,15 @@ export default function App() {
           <Route path="templates" element={<Templates />} />
           <Route path="templates/new" element={<TemplateEditor />} />
           <Route path="templates/:id/edit" element={<TemplateEditor />} />
-          <Route path="analytics" element={<Analytics />} />
+           <Route path="analytics" element={<Analytics />} />
           <Route path="email-tracking" element={<EmailTracking />} />
+          <Route path="ai-assistant" element={<AiAssistant />} />
+          <Route path="job-search" element={<JobSearch />} />
+          <Route path="interview-prep" element={<InterviewPrep />} />
+          <Route path="post-job" element={<PostJob />} />
+          <Route path="community" element={<Community />} />
+          <Route path="resume-builder" element={<ResumeBuilder />} />
+          <Route path="resume-rag" element={<ResumeRag />} />
           <Route path="settings" element={<Settings />} />
           <Route path="how-to-use" element={<HowToUse />} />
           <Route path="pricing" element={<Pricing />} />

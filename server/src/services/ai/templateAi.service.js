@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import { env } from '../../config/env.js';
+import { logger } from '../../utils/logger.js';
 
 const AI_SYSTEM_PROMPT = `You are an expert cold email generator and HTML email designer.
 
@@ -191,40 +193,209 @@ function parseModelJson(raw) {
   return null;
 }
 
+async function logLangsmithRunStart(runId, promptText) {
+  try {
+    const url = `${env.ai.langsmith.endpoint}/runs`;
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': env.ai.langsmith.apiKey,
+      },
+      body: JSON.stringify({
+        id: runId,
+        name: 'generate_cold_email_template',
+        run_type: 'llm',
+        inputs: { prompt: promptText },
+        session_name: env.ai.langsmith.project,
+        start_time: new Date().toISOString(),
+      }),
+    });
+  } catch (err) {
+    logger.debug('Langsmith trace start error', { error: err.message });
+  }
+}
+
+async function logLangsmithRunEnd(runId, rawOutput, errInfo, parsedOutput) {
+  try {
+    const url = `${env.ai.langsmith.endpoint}/runs/${runId}`;
+    await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': env.ai.langsmith.apiKey,
+      },
+      body: JSON.stringify({
+        outputs: parsedOutput ? { parsed: parsedOutput } : { raw: rawOutput },
+        error: errInfo ? String(errInfo) : undefined,
+        end_time: new Date().toISOString(),
+      }),
+    });
+  } catch (err) {
+    logger.debug('Langsmith trace end error', { error: err.message });
+  }
+}
+
+async function generateWithGemini(userPrompt) {
+  const apiKey = normalize(env.ai.googleApiKey);
+  if (!apiKey) return null;
+
+  const runId = crypto.randomUUID();
+  if (env.ai.langsmith.tracing && env.ai.langsmith.apiKey) {
+    await logLangsmithRunStart(runId, userPrompt);
+  }
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const payload = {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `${AI_SYSTEM_PROMPT}\n\nUser Prompt/Input:\n${userPrompt}`,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+      },
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      logger.error('Gemini API call failed', { status: response.status, error: errText });
+      if (env.ai.langsmith.tracing && env.ai.langsmith.apiKey) {
+        await logLangsmithRunEnd(runId, null, errText);
+      }
+      return null;
+    }
+
+    const data = await response.json();
+    const rawContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawContent) {
+      if (env.ai.langsmith.tracing && env.ai.langsmith.apiKey) {
+        await logLangsmithRunEnd(runId, null, 'Empty parts response from Gemini');
+      }
+      return null;
+    }
+
+    const parsed = parseModelJson(rawContent);
+    if (!parsed?.subject || !parsed?.body) {
+      if (env.ai.langsmith.tracing && env.ai.langsmith.apiKey) {
+        await logLangsmithRunEnd(runId, rawContent, 'Failed to parse JSON containing subject and body');
+      }
+      return null;
+    }
+
+    const result = {
+      subject: normalize(parsed.subject),
+      body: normalize(parsed.body),
+    };
+
+    if (env.ai.langsmith.tracing && env.ai.langsmith.apiKey) {
+      await logLangsmithRunEnd(runId, rawContent, null, result);
+    }
+
+    logger.info('Successfully generated template via Gemini API');
+    return result;
+  } catch (err) {
+    logger.error('Gemini processing error', { error: err.message });
+    if (env.ai.langsmith.tracing && env.ai.langsmith.apiKey) {
+      await logLangsmithRunEnd(runId, null, err.message);
+    }
+    return null;
+  }
+}
+
+async function generateWithOllama(userPrompt) {
+  try {
+    const url = 'http://127.0.0.1:11434/api/generate';
+    const payload = {
+      model: 'qwen2.5-coder:0.5b',
+      prompt: `${AI_SYSTEM_PROMPT}\n\nUser Prompt/Input:\n${userPrompt}`,
+      format: 'json',
+      stream: false,
+      options: {
+        temperature: 0.3,
+      },
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      logger.error('Ollama API call failed', { status: response.status });
+      return null;
+    }
+
+    const data = await response.json();
+    const rawContent = data?.response;
+    if (!rawContent) return null;
+
+    const parsed = parseModelJson(rawContent);
+    if (!parsed?.subject || !parsed?.body) return null;
+
+    logger.info('Successfully generated template via local Ollama (qwen2.5-coder:0.5b)');
+    return {
+      subject: normalize(parsed.subject),
+      body: normalize(parsed.body),
+    };
+  } catch (err) {
+    logger.error('Ollama processing error', { error: err.message });
+    return null;
+  }
+}
+
 async function generateWithOpenAI(userPrompt) {
   const apiKey = normalize(env.ai.openaiApiKey);
   if (!apiKey) return null;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: env.ai.openaiModel || 'gpt-4o-mini',
-      temperature: 0.4,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: AI_SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-    }),
-  });
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: env.ai.openaiModel || 'gpt-4o-mini',
+        temperature: 0.4,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = parseModelJson(content);
+    if (!parsed?.subject || !parsed?.body) return null;
+
+    return {
+      subject: normalize(parsed.subject),
+      body: normalize(parsed.body),
+    };
+  } catch (err) {
+    logger.error('OpenAI processing error', { error: err.message });
     return null;
   }
-
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  const parsed = parseModelJson(content);
-  if (!parsed?.subject || !parsed?.body) return null;
-
-  return {
-    subject: normalize(parsed.subject),
-    body: normalize(parsed.body),
-  };
 }
 
 export async function generateTemplateFromPrompt(userPrompt) {
@@ -233,10 +404,24 @@ export async function generateTemplateFromPrompt(userPrompt) {
     return fallbackTemplate('');
   }
 
+  // 1. Try Gemini first
+  const geminiResult = await generateWithGemini(prompt);
+  if (geminiResult?.subject && geminiResult?.body) {
+    return geminiResult;
+  }
+
+  // 2. Try Ollama (qwen2.5-coder:0.5b) second
+  const ollamaResult = await generateWithOllama(prompt);
+  if (ollamaResult?.subject && ollamaResult?.body) {
+    return ollamaResult;
+  }
+
+  // 3. Try OpenAI fallback
   const aiResult = await generateWithOpenAI(prompt);
   if (aiResult?.subject && aiResult?.body) {
     return aiResult;
   }
 
+  // 4. Static fallback
   return fallbackTemplate(prompt);
 }
