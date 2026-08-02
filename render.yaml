@@ -24,6 +24,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Pinned because Render's current default (Node 24) fails TLS
+      # handshakes against this MongoDB Atlas cluster — "tlsv1 alert
+      # internal error" — while this version connects reliably. Also set
+      # via .node-version at the repo root as a second signal.
+      - key: NODE_VERSION
+        value: 22.20.0
 
       # ---- Client (public, inlined into the browser bundle at build time) ----
       # Same-origin deploy, so a relative path is correct here.
