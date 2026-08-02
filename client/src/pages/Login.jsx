@@ -22,15 +22,29 @@ export default function Login() {
   const [error, setError] = useState(firebaseConfigError || '');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // Gates the getAuthToken()-based redirect below. persistSession sets the
+  // auth token in localStorage synchronously, before setUser even propagates
+  // — so without this gate, the *first* re-render triggered by any auth
+  // state change (ours or the generic onAuthStateChanged listener) hits that
+  // redirect immediately, unmounting this page and cancelling the effect
+  // below mid-flight, before it ever reaches the Gmail-connect check or its
+  // own navigate() call. Blocking on this until we know either way removes
+  // the race instead of trying to win it.
+  const [checkingGoogleRedirect, setCheckingGoogleRedirect] = useState(true);
 
   // signInWithRedirect navigates the whole tab away and back — this is where
-  // we pick the result back up once Firebase returns here. No-ops (resolves
-  // null) on every ordinary page load that isn't a redirect return.
+  // we pick the result back up once Firebase returns here. Resolves null (and
+  // clears the gate above) on every ordinary page load that isn't a redirect
+  // return, which is the common case.
   useEffect(() => {
     let cancelled = false;
     consumeGoogleRedirectResult()
       .then(async (redirectedUser) => {
-        if (cancelled || !redirectedUser) return;
+        if (cancelled) return;
+        if (!redirectedUser) {
+          setCheckingGoogleRedirect(false);
+          return;
+        }
         setGoogleLoading(true);
         // Firebase sign-in proves identity but yields no refresh token, so it
         // cannot authorise the queue to send mail later. Continue straight
@@ -47,6 +61,7 @@ export default function Login() {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Could not complete Google login');
         setGoogleLoading(false);
+        setCheckingGoogleRedirect(false);
       });
     return () => {
       cancelled = true;
@@ -54,7 +69,7 @@ export default function Login() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!ready) {
+  if (!ready || checkingGoogleRedirect) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-app-bg">
         <PageLoader />
@@ -85,18 +100,9 @@ export default function Login() {
     setError('');
     setGoogleLoading(true);
     try {
+      // Navigates the tab away to Google — never resolves. The mount effect
+      // above picks the result back up once Firebase returns here.
       await loginWithGoogle();
-
-      // Firebase sign-in proves identity but yields no refresh token, so it cannot
-      // authorise the queue to send mail later. Continue straight into Google's
-      // offline consent while the user is still in a sign-in mindset.
-      const connectUrl = await getGmailConnectUrlIfNeeded();
-      if (connectUrl) {
-        window.location.assign(connectUrl);
-        return;
-      }
-
-      navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start Google login');
       setGoogleLoading(false);
