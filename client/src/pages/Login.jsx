@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Card, { CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -12,7 +12,7 @@ import { PageLoader } from '../components/ui/LoadingSpinner';
 import ThemeToggle from '../components/ui/ThemeToggle';
 
 export default function Login() {
-  const { login, loginWithGoogle, ready } = useAuth();
+  const { login, loginWithGoogle, consumeGoogleRedirectResult, ready } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from || '/app';
@@ -22,6 +22,37 @@ export default function Login() {
   const [error, setError] = useState(firebaseConfigError || '');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // signInWithRedirect navigates the whole tab away and back — this is where
+  // we pick the result back up once Firebase returns here. No-ops (resolves
+  // null) on every ordinary page load that isn't a redirect return.
+  useEffect(() => {
+    let cancelled = false;
+    consumeGoogleRedirectResult()
+      .then(async (redirectedUser) => {
+        if (cancelled || !redirectedUser) return;
+        setGoogleLoading(true);
+        // Firebase sign-in proves identity but yields no refresh token, so it
+        // cannot authorise the queue to send mail later. Continue straight
+        // into Google's offline consent while still in a sign-in mindset.
+        const connectUrl = await getGmailConnectUrlIfNeeded();
+        if (cancelled) return;
+        if (connectUrl) {
+          window.location.assign(connectUrl);
+          return;
+        }
+        navigate(from, { replace: true });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Could not complete Google login');
+        setGoogleLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!ready) {
     return (

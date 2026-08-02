@@ -9,7 +9,8 @@ import {
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
   updateProfile,
@@ -43,6 +44,21 @@ function clearSession() {
 function requireAuth() {
   if (!auth) throw new Error(firebaseConfigError);
   return auth;
+}
+
+// Module-level, not component state: StrictMode double-invokes mount effects
+// in dev, and it isn't documented whether Firebase's own getRedirectResult()
+// is safe to call more than once per page load (some SDKs only surface the
+// result to the first caller). Caching the promise here guarantees Firebase
+// is only ever actually asked once per page load — every caller (real or
+// StrictMode's phantom re-invoke) shares the same resolved outcome, no
+// matter how Firebase's own internals behave.
+let redirectResultPromise = null;
+function getRedirectResultOnce(authInstance) {
+  if (!redirectResultPromise) {
+    redirectResultPromise = getRedirectResult(authInstance);
+  }
+  return redirectResultPromise;
 }
 
 export function AuthProvider({ children }) {
@@ -115,11 +131,30 @@ export function AuthProvider({ children }) {
     return session;
   }, []);
 
+  // signInWithPopup relies on postMessage/storage access between the popup
+  // and the opener window. Our app's origin (the deployed Render domain)
+  // differs from Firebase's own authDomain, and browsers' third-party
+  // storage partitioning (Chrome, Safari ITP, etc.) blocks that cross-origin
+  // channel — even a fully completed sign-in can't report its result back,
+  // so Firebase's SDK falls back to reporting "popup closed by user" no
+  // matter what the user actually did. signInWithRedirect sidesteps this
+  // entirely by navigating the whole tab through Google and back.
   const loginWithGoogle = useCallback(async () => {
-    const { user: credentialUser } = await signInWithPopup(requireAuth(), googleProvider);
-    const session = await persistSession(credentialUser);
+    await signInWithRedirect(requireAuth(), googleProvider);
+    // Never resolves — the page navigates away before this line matters.
+  }, []);
+
+  // Called once on mount by whichever page initiated the Google redirect
+  // (currently only Login) to pick up the result once Firebase navigates
+  // back. Returns the signed-in user, or null if this load isn't a redirect
+  // return (the common case — most page loads aren't).
+  const consumeGoogleRedirectResult = useCallback(async () => {
+    if (!auth) return null;
+    const result = await getRedirectResultOnce(auth);
+    if (!result?.user) return null;
+    const session = await persistSession(result.user);
     setUser(session.user);
-    return session;
+    return session.user;
   }, []);
 
   const updateUser = useCallback((nextUser) => {
@@ -139,10 +174,11 @@ export function AuthProvider({ children }) {
       login,
       register,
       loginWithGoogle,
+      consumeGoogleRedirectResult,
       updateUser,
       logout,
     }),
-    [user, ready, login, register, loginWithGoogle, updateUser, logout]
+    [user, ready, login, register, loginWithGoogle, consumeGoogleRedirectResult, updateUser, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
