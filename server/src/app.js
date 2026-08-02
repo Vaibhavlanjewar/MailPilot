@@ -1,10 +1,12 @@
 import express from "express";
 import fs from "fs";
+import https from "https";
 import path from "path";
 import { fileURLToPath } from "url";
 import helmet from "helmet";
 import cors from "cors";
 import { env } from "./config/env.js";
+import { logger } from "./utils/logger.js";
 import { createApiRateLimiter } from "./utils/rateLimiter.js";
 import campaignRoutes from "./routes/campaign.routes.js";
 import contactRoutes from "./routes/contact.routes.js";
@@ -27,6 +29,43 @@ const app = express();
 
 // ✅ FIX: trust proxy (IMPORTANT for Render)
 app.set("trust proxy", 1);
+
+// Transparently proxy Firebase's own auth-handler paths through our origin.
+// signInWithRedirect's result resolution relies on a hidden iframe talking
+// to Firebase's authDomain (<project>.firebaseapp.com) — when that differs
+// from the app's own origin (true here: this app is on Render, not Firebase
+// Hosting), browsers' third-party storage partitioning silently blocks that
+// communication. getRedirectResult() then just resolves null with no error,
+// which looks identical to "the user closed the tab" from the app's side.
+// This is Firebase's own documented fix: proxy /__/auth/* so the browser
+// never sees a cross-origin request at all. Must run before helmet/cors so
+// Firebase's real response headers pass through unmodified, and must be
+// paired with pointing VITE_FIREBASE_AUTH_DOMAIN at this app's own domain
+// instead of the default <project>.firebaseapp.com.
+// https://firebase.google.com/docs/auth/web/redirect-best-practices
+if (env.firebase.projectId) {
+  const AUTH_PROXY_HOST = `${env.firebase.projectId}.firebaseapp.com`;
+  app.use("/__/auth", (req, res) => {
+    const proxyReq = https.request(
+      {
+        host: AUTH_PROXY_HOST,
+        port: 443,
+        path: req.originalUrl,
+        method: req.method,
+        headers: { ...req.headers, host: AUTH_PROXY_HOST },
+      },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res);
+      },
+    );
+    proxyReq.on("error", (err) => {
+      logger.error("Auth handler proxy error", { error: err.message });
+      if (!res.headersSent) res.status(502).end();
+    });
+    req.pipe(proxyReq);
+  });
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.resolve(__dirname, "../../client/dist");
