@@ -142,22 +142,38 @@ app.use("/api", (req, res, next) => {
 // Helmet's default CSP (script-src/connect-src 'self') only ever applied to
 // API responses in dev, since Vite served the actual HTML page separately —
 // Express never sat in front of the client. Now that this same server also
-// serves the built client in production, that default CSP blocks Firebase
-// Auth's own network calls to Google (identitytoolkit/securetoken for
-// email+password, apis.google.com + accounts.google.com for the Google
-// sign-in popup), which breaks login entirely. Widen just those origins.
+// serves the built client in production, that default CSP blocks every
+// third-party script/origin the client loads at runtime: Firebase Auth's own
+// calls to Google (identitytoolkit/securetoken for email+password,
+// apis.google.com + accounts.google.com for Google sign-in), pdf.js +
+// mammoth.js from cdnjs (resume upload parsing), and Pyodide from jsDelivr
+// (the in-browser Python code sandbox, which also needs 'wasm-unsafe-eval'
+// since it runs as WebAssembly). Helmet only replaces directive keys that are
+// explicitly listed here — anything left unset (style-src, font-src, etc.)
+// keeps Helmet's own sensible default, so only directives actually locked
+// down below need every origin the app depends on spelled out.
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "https://apis.google.com", "https://accounts.google.com"],
+        scriptSrc: [
+          "'self'",
+          "'wasm-unsafe-eval'",
+          "https://apis.google.com",
+          "https://accounts.google.com",
+          "https://cdnjs.cloudflare.com",
+          "https://cdn.jsdelivr.net",
+        ],
+        workerSrc: ["'self'", "blob:", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"],
         connectSrc: [
           "'self'",
           "https://identitytoolkit.googleapis.com",
           "https://securetoken.googleapis.com",
           "https://www.googleapis.com",
+          "https://cdnjs.cloudflare.com",
+          "https://cdn.jsdelivr.net",
         ],
         frameSrc: ["'self'", "https://accounts.google.com", "https://*.firebaseapp.com"],
         imgSrc: ["'self'", "data:", "https:"],
