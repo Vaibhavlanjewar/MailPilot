@@ -139,9 +139,30 @@ app.use("/api", (req, res, next) => {
 });
 
 // ✅ Security
+// Helmet's default CSP (script-src/connect-src 'self') only ever applied to
+// API responses in dev, since Vite served the actual HTML page separately —
+// Express never sat in front of the client. Now that this same server also
+// serves the built client in production, that default CSP blocks Firebase
+// Auth's own network calls to Google (identitytoolkit/securetoken for
+// email+password, apis.google.com + accounts.google.com for the Google
+// sign-in popup), which breaks login entirely. Widen just those origins.
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://apis.google.com", "https://accounts.google.com"],
+        connectSrc: [
+          "'self'",
+          "https://identitytoolkit.googleapis.com",
+          "https://securetoken.googleapis.com",
+          "https://www.googleapis.com",
+        ],
+        frameSrc: ["'self'", "https://accounts.google.com", "https://*.firebaseapp.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
   }),
 );
 
