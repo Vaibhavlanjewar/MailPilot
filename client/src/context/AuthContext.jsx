@@ -10,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithRedirect,
+  signInWithPopup,
   getRedirectResult,
   signOut,
   onAuthStateChanged,
@@ -139,7 +140,32 @@ export function AuthProvider({ children }) {
   // so Firebase's SDK falls back to reporting "popup closed by user" no
   // matter what the user actually did. signInWithRedirect sidesteps this
   // entirely by navigating the whole tab through Google and back.
+  // For local development, many browsers block third-party storage used by
+  // Google's iframe/popup flow (tracking prevention). In that environment
+  // using a popup often still works and keeps the user in-app, so use it as
+  // a fallback when running on localhost. In production use redirect which
+  // is more robust across deployed origins.
   const loginWithGoogle = useCallback(async () => {
+    const isLocal = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    );
+
+    if (isLocal && googleProvider) {
+      try {
+        const { user: popupUser } = await signInWithPopup(requireAuth(), googleProvider);
+        if (popupUser) {
+          const session = await persistSession(popupUser);
+          setUser(session.user);
+        }
+        return;
+      } catch (err) {
+        // Fall back to redirect if popup is blocked or fails
+        // (the error will be surfaced by consumeGoogleRedirectResult on return)
+        // eslint-disable-next-line no-console
+        console.warn('Google popup sign-in failed, falling back to redirect:', err?.message || err);
+      }
+    }
+
     await signInWithRedirect(requireAuth(), googleProvider);
     // Never resolves — the page navigates away before this line matters.
   }, []);
@@ -150,6 +176,11 @@ export function AuthProvider({ children }) {
   // return (the common case — most page loads aren't).
   const consumeGoogleRedirectResult = useCallback(async () => {
     if (!auth) return null;
+
+    const isRedirectReturn =
+      typeof window !== 'undefined' &&
+      window.location.search.includes('authType=signInViaRedirect');
+
     try {
       const result = await getRedirectResultOnce(auth);
       if (result?.user) {
@@ -157,8 +188,11 @@ export function AuthProvider({ children }) {
         setUser(session.user);
         return session.user;
       }
-    } catch {
-      // ignore errors when this load was not a Firebase redirect return
+    } catch (err) {
+      if (isRedirectReturn) {
+        throw err;
+      }
+      return null;
     }
 
     if (auth.currentUser) {
@@ -167,7 +201,31 @@ export function AuthProvider({ children }) {
       return session.user;
     }
 
-    return null;
+    // If the redirect return completes after the page is loaded, wait briefly
+    // for onAuthStateChanged to fire before giving up.
+    return new Promise((resolve) => {
+      let cancelled = false;
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (cancelled) return;
+        if (firebaseUser) {
+          try {
+            const session = await persistSession(firebaseUser);
+            setUser(session.user);
+            resolve(session.user);
+          } catch {
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
+      });
+
+      setTimeout(() => {
+        cancelled = true;
+        unsubscribe();
+        resolve(null);
+      }, 3000);
+    });
   }, []);
 
   const updateUser = useCallback((nextUser) => {
