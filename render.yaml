@@ -13,7 +13,12 @@ services:
     runtime: node
     plan: free
     # Build from the repo root: npm workspaces need both client/ and server/.
-    buildCommand: npm install && npm run build
+    # --include=dev is required because NODE_ENV=production is set below —
+    # npm otherwise skips devDependencies (vite, tailwind, postcss, the React
+    # plugin) during install, and `vite build` then fails with "command not
+    # found" (exit 127). NODE_ENV=production itself must stay set, though —
+    # it's what makes the Express server serve the built client at runtime.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
