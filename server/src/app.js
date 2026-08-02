@@ -236,7 +236,15 @@ if (serveClient) {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
     if (req.path.startsWith("/api")) return next();
 
-    res.sendFile(path.join(clientDist, "index.html"), (err) => next(err));
+    // sendFile's callback fires on BOTH success and failure — err is only
+    // set on failure. Calling next(err) unconditionally meant next() (no
+    // error) ran even after a successful send, falling through to
+    // notFoundHandler and errorHandler trying to write a second response on
+    // an already-completed one: "Cannot set headers after they are sent to
+    // the client" (ERR_HTTP_HEADERS_SENT), on every single SPA page load.
+    res.sendFile(path.join(clientDist, "index.html"), (err) => {
+      if (err) next(err);
+    });
   });
 }
 
