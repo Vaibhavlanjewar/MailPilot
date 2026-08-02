@@ -13,6 +13,27 @@ dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 // JSON file instead of env vars; server.js verifies the Admin SDK actually starts.
 const requiredInProd = ["MONGODB_URI", "JWT_SECRET", "REDIS_HOST"];
 
+/**
+ * Dashboard env-var UIs (Render, Railway, etc.) are inconsistent about
+ * multi-line PEM values pasted with literal \n escapes: some keep them
+ * literal, some silently expand them to real newlines, and some preserve a
+ * surrounding quote pair as part of the stored value. Normalize all three
+ * instead of assuming one specific mangling.
+ */
+function normalizePrivateKey(raw) {
+  let key = (raw || "").trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1).trim();
+  }
+  if (!key.includes("\n")) {
+    key = key.replace(/\\n/g, "\n");
+  }
+  return key;
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT) || 4000,
@@ -136,7 +157,7 @@ export const env = {
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || '',
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
-    privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    privateKey: normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY),
     /** Path to a service-account JSON, relative to server/. Takes precedence over the vars above. */
     serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
     /** Storage bucket for resume binaries; falls back to the client-side value. */
