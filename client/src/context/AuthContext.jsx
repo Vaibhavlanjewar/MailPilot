@@ -150,11 +150,24 @@ export function AuthProvider({ children }) {
   // return (the common case — most page loads aren't).
   const consumeGoogleRedirectResult = useCallback(async () => {
     if (!auth) return null;
-    const result = await getRedirectResultOnce(auth);
-    if (!result?.user) return null;
-    const session = await persistSession(result.user);
-    setUser(session.user);
-    return session.user;
+    try {
+      const result = await getRedirectResultOnce(auth);
+      if (result?.user) {
+        const session = await persistSession(result.user);
+        setUser(session.user);
+        return session.user;
+      }
+    } catch {
+      // ignore errors when this load was not a Firebase redirect return
+    }
+
+    if (auth.currentUser) {
+      const session = await persistSession(auth.currentUser);
+      setUser(session.user);
+      return session.user;
+    }
+
+    return null;
   }, []);
 
   const updateUser = useCallback((nextUser) => {

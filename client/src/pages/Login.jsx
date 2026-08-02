@@ -42,6 +42,10 @@ export default function Login() {
       .then(async (redirectedUser) => {
         if (cancelled) return;
         if (!redirectedUser) {
+          if (getAuthToken()) {
+            navigate(from, { replace: true });
+            return;
+          }
           setCheckingGoogleRedirect(false);
           return;
         }
