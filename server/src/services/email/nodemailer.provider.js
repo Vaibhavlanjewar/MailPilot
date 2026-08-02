@@ -41,9 +41,9 @@ export class NodemailerProvider {
   }
 
   /**
-   * @param {{ to: string, subject: string, html?: string, text?: string, from?: string | import('nodemailer').Address, replyTo?: string }} params
+   * @param {{ to: string, subject: string, html?: string, text?: string, from?: string | import('nodemailer').Address, replyTo?: string, attachments?: { filename: string, content: Buffer, contentType?: string }[] }} params
    */
-  async send({ to, subject, html, text, from, replyTo }) {
+  async send({ to, subject, html, text, from, replyTo, attachments }) {
     if (!this._transport) {
       throw new Error(
         'Email transport not configured. Set SMTP_HOST and related vars in .env'
@@ -56,6 +56,7 @@ export class NodemailerProvider {
       html,
       text: text || undefined,
       ...(replyTo ? { replyTo } : {}),
+      ...(attachments?.length ? { attachments } : {}),
     });
     return { messageId: info.messageId || '', response: info.response };
   }

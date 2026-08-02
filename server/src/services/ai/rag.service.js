@@ -1,4 +1,5 @@
-import { generateCoreStructuredAi } from './aiCore.service.js';
+import { generateStructuredAi } from './aiCore.service.js';
+import { embedQuery, cosineSimilarity } from './embedding.service.js';
 
 /**
  * Splits text into overlapping chunks.
@@ -52,6 +53,36 @@ export function getTermFrequencyVector(text) {
 }
 
 /**
+ * Inverse document frequency across the chunk set. Without this a term appearing in
+ * every chunk (the candidate's own name, "engineer") scores as highly as a rare,
+ * genuinely discriminating one.
+ */
+export function computeIdf(chunkVectors) {
+  const docCount = chunkVectors.length;
+  const seenIn = {};
+
+  for (const vec of chunkVectors) {
+    for (const term of Object.keys(vec)) {
+      seenIn[term] = (seenIn[term] || 0) + 1;
+    }
+  }
+
+  const idf = {};
+  for (const [term, count] of Object.entries(seenIn)) {
+    idf[term] = Math.log((docCount + 1) / (count + 1)) + 1;
+  }
+  return idf;
+}
+
+export function applyIdf(tfVector, idf) {
+  const weighted = {};
+  for (const [term, freq] of Object.entries(tfVector)) {
+    weighted[term] = freq * (idf[term] ?? 1);
+  }
+  return weighted;
+}
+
+/**
  * Calculates cosine similarity between two term frequency maps.
  */
 export function calculateCosineSimilarity(vecA, vecB) {
@@ -74,42 +105,77 @@ export function calculateCosineSimilarity(vecA, vecB) {
 }
 
 /**
- * Service to execute local vector search on chunked text & request AI response synthesis.
+ * Ranks pre-embedded chunks against the query vector. Returns null when the
+ * stored chunks carry no vectors, so the caller can fall back to lexical search.
  */
-export async function queryResumeRAG(resumeText, query) {
-  if (!resumeText) {
-    throw new Error("No resume text provided for analysis.");
-  }
-  if (!query) {
-    throw new Error("Query parameters are empty.");
-  }
+async function retrieveBySimilarity(storedChunks, query, topK) {
+  const withVectors = storedChunks.filter((c) => c.vector?.length);
+  if (!withVectors.length) return null;
 
-  // 1. Chunk document
-  const chunks = chunkText(resumeText);
-  if (chunks.length === 0) {
-    return {
-      answer: "Unable to process empty resume text.",
-      sources: []
-    };
-  }
+  const queryVector = await embedQuery(query);
+  if (!queryVector) return null;
 
-  // 2. Compute similarity
-  const queryVec = getTermFrequencyVector(query);
-  const scoredChunks = chunks.map((text, index) => {
-    const chunkVec = getTermFrequencyVector(text);
-    const score = calculateCosineSimilarity(queryVec, chunkVec);
-    return { index: index + 1, text, score };
-  });
-
-  // 3. Sort and pick top K
-  const matchedSources = scoredChunks
+  return withVectors
+    .map((c) => ({
+      index: c.index,
+      text: c.text,
+      score: cosineSimilarity(queryVector, c.vector),
+    }))
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3) // retrieve top 3 relevant chunks
-    .filter(c => c.score > 0.02); // threshold filters out completely irrelevant passages
+    .slice(0, topK)
+    .filter((c) => c.score > 0.3);
+}
 
-  const retrievalContext = matchedSources.length > 0 
-    ? matchedSources.map(c => `[Chunk #${c.index} (Score: ${c.score.toFixed(2)})]\n${c.text}`).join('\n\n---\n\n')
-    : "No highly matching segments found in the resume. Revert to general layout context.";
+/** Lexical IDF-weighted ranking; used when embeddings are unavailable. */
+function retrieveByKeyword(chunks, query, topK) {
+  const chunkVectors = chunks.map((c) => getTermFrequencyVector(c.text));
+  const idf = computeIdf(chunkVectors);
+  const queryVec = applyIdf(getTermFrequencyVector(query), idf);
+
+  return chunks
+    .map((c, i) => ({
+      index: c.index,
+      text: c.text,
+      score: calculateCosineSimilarity(queryVec, applyIdf(chunkVectors[i], idf)),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
+    .filter((c) => c.score > 0.02);
+}
+
+/**
+ * Answers a question over a resume. Accepts either stored chunks (with vectors)
+ * or raw text, and reports which retrieval strategy was actually used.
+ */
+export async function queryResumeRAG(resumeInput, query, { topK = 3 } = {}) {
+  if (!query) {
+    throw new Error('Query parameters are empty.');
+  }
+
+  const storedChunks = Array.isArray(resumeInput?.chunks) ? resumeInput.chunks : null;
+  const chunks =
+    storedChunks ||
+    chunkText(typeof resumeInput === 'string' ? resumeInput : resumeInput?.content || '').map(
+      (text, i) => ({ index: i + 1, text }),
+    );
+
+  if (!chunks.length) {
+    return { answer: 'This resume has no readable text.', sources: [], retrieval: 'none' };
+  }
+
+  let matchedSources = await retrieveBySimilarity(chunks, query, topK);
+  let retrieval = 'semantic';
+
+  if (!matchedSources) {
+    matchedSources = retrieveByKeyword(chunks, query, topK);
+    retrieval = 'keyword';
+  }
+
+  const retrievalContext = matchedSources.length
+    ? matchedSources
+        .map((c) => `[Chunk #${c.index} (Score: ${c.score.toFixed(2)})]\n${c.text}`)
+        .join('\n\n---\n\n')
+    : 'No matching segments were found in the resume.';
 
   // 4. Formulate System & User prompts
   const systemPrompt = `
@@ -134,30 +200,31 @@ export async function queryResumeRAG(resumeText, query) {
     ${query}
   `.trim();
 
-  try {
-    const aiResponse = await generateCoreStructuredAi(systemPrompt, userPrompt);
-    
-    if (aiResponse && aiResponse.answer) {
-      return {
-        answer: aiResponse.answer,
-        criticalKeywords: aiResponse.criticalKeywords || [],
-        recommendedAction: aiResponse.recommendedAction || "",
-        sources: matchedSources
-      };
-    }
-  } catch (err) {
-    console.error("RAG AI generation error:", err);
+  const { data, provider } = await generateStructuredAi(systemPrompt, userPrompt, {
+    isValid: (result) => Boolean(result.answer),
+    runName: 'resume_rag_query',
+  });
+
+  if (data) {
+    return {
+      answer: data.answer,
+      criticalKeywords: data.criticalKeywords || [],
+      recommendedAction: data.recommendedAction || '',
+      sources: matchedSources,
+      retrieval,
+      provider,
+    };
   }
 
-  // Fallback if LLM execution is offline or crashes
-  const fallbackWords = matchedSources.length > 0 
-    ? `From references in your resume (e.g. "${matchedSources[0].text.slice(0, 100)}..."), this matching section was retrieved.`
-    : "No corresponding details could be queried from the resume.";
-    
+  // Retrieval still succeeded even with every LLM provider down — return the matches.
   return {
-    answer: `${fallbackWords} Let us review the query: "${query}"`,
-    criticalKeywords: Object.keys(queryVec).slice(0, 3),
-    recommendedAction: "Review technical stack terms or custom bullet templates.",
-    sources: matchedSources
+    answer: matchedSources.length
+      ? 'AI synthesis is unavailable right now, but these resume sections matched your query most closely.'
+      : 'AI synthesis is unavailable, and no resume section matched your query.',
+    criticalKeywords: Object.keys(getTermFrequencyVector(query)).slice(0, 5),
+    recommendedAction: 'Review the retrieved sections below, then retry for an AI summary.',
+    sources: matchedSources,
+    retrieval,
+    provider: null,
   };
 }

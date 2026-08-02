@@ -6,18 +6,20 @@ import Input, { Label } from '../components/ui/Input';
 import PasswordInput from '../components/ui/PasswordInput';
 import { useAuth } from '../context/AuthContext';
 import { getAuthToken } from '../services/api';
+import { firebaseConfigError } from '../services/firebase';
+import { getGmailConnectUrlIfNeeded } from '../services/gmailConnect';
 import { PageLoader } from '../components/ui/LoadingSpinner';
 import ThemeToggle from '../components/ui/ThemeToggle';
 
 export default function Login() {
-  const { login, ready } = useAuth();
+  const { login, loginWithGoogle, ready } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from || '/app';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(firebaseConfigError || '');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -42,14 +44,6 @@ export default function Login() {
       await login(normalizedEmail, password);
       navigate(from, { replace: true });
     } catch (err) {
-      if (err?.status === 403 && err?.data?.requiresOtp) {
-        const params = new URLSearchParams({
-          email: normalizedEmail,
-          purpose: err?.data?.purpose === 'forgot' ? 'forgot' : 'register',
-        });
-        navigate(`/verify-otp?${params.toString()}`, { replace: true });
-        return;
-      }
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
@@ -60,20 +54,18 @@ export default function Login() {
     setError('');
     setGoogleLoading(true);
     try {
-      const data = await window.fetch(
-        `${import.meta.env.VITE_API_URL || '/api'}/auth/google/url?from=${encodeURIComponent(from)}`,
-      ).then(async (resp) => {
-        if (!resp.ok) {
-          const payload = await resp.json().catch(() => ({}));
-          throw new Error(payload?.message || 'Could not start Google login');
-        }
-        return resp.json();
-      });
+      await loginWithGoogle();
 
-      if (!data?.url) {
-        throw new Error('Could not start Google login');
+      // Firebase sign-in proves identity but yields no refresh token, so it cannot
+      // authorise the queue to send mail later. Continue straight into Google's
+      // offline consent while the user is still in a sign-in mindset.
+      const connectUrl = await getGmailConnectUrlIfNeeded();
+      if (connectUrl) {
+        window.location.assign(connectUrl);
+        return;
       }
-      window.location.assign(data.url);
+
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start Google login');
       setGoogleLoading(false);

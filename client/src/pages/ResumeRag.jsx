@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 
 export default function ResumeRag() {
-  const location = useLocation();
-  const passedResumeId = location.state?.resumeId;
-
-  const [resumesList, setResumesList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
-  
-  // Selected Profile state
-  const [selectedResumeId, setSelectedResumeId] = useState('');
   const [selectedResume, setSelectedResume] = useState(null);
   
   // Chunking visualizer states
@@ -33,49 +26,23 @@ export default function ResumeRag() {
   const fetchResumes = async () => {
     setLoadingList(true);
     try {
-      const resp = await api.get('/resumes');
-      if (resp.data?.success && resp.data.resumes) {
-        setResumesList(resp.data.resumes);
-        if (resp.data.resumes.length > 0) {
-          const target = passedResumeId 
-            ? resp.data.resumes.find(r => r.id === passedResumeId) 
-            : null;
-          selectResumeObject(target || resp.data.resumes[0]);
-        }
-      }
+      const { data } = await api.get('/resumes/me');
+      setSelectedResume(data.resume);
+      if (data.resume) await fetchChunks();
     } catch (err) {
-      console.warn("Failed fetching resumes index:", err);
-      toast.warning("Could not sync with Cloud storage. Working in text input mode.");
+      toast.error(err.message || 'Could not load your resume.');
     } finally {
       setLoadingList(false);
     }
   };
 
-  const selectResumeObject = async (resume) => {
-    setSelectedResume(resume);
-    setSelectedResumeId(resume.id);
-    setMatchedSourceIds([]);
-    await fetchChunksForText(resume.content);
-  };
-
-  const handleResumeChange = (e) => {
-    const resId = e.target.value;
-    const found = resumesList.find(r => r.id === resId);
-    if (found) {
-      selectResumeObject(found);
-    }
-  };
-
-  const fetchChunksForText = async (text) => {
+  const fetchChunks = async () => {
     setLoadingChunks(true);
     try {
-      const resp = await api.post('/ai/rag/chunks', { resumeText: text });
-      if (resp.data?.success && resp.data.chunks) {
-        setChunks(resp.data.chunks);
-      }
+      const { data } = await api.get('/ai/rag/chunks');
+      setChunks(data.chunks || []);
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to generate text chunking segments.");
+      toast.error(err.message || 'Could not load the retrieval index.');
     } finally {
       setLoadingChunks(false);
     }
@@ -88,49 +55,41 @@ export default function ResumeRag() {
       return;
     }
 
-    if (!selectedResume && !selectedResumeId) {
-      toast.info("Please upload a resume or select a template profile.");
+    if (!selectedResume) {
+      toast.info('Add your resume under My Resume first.');
       return;
     }
 
     setLoadingQuery(true);
     setMatchedSourceIds([]);
 
-    const payload = {
-      query: query.trim()
-    };
-
-    if (selectedResumeId) {
-      payload.resumeId = selectedResumeId;
-    } else {
-      payload.resumeText = selectedResume.content;
-    }
-
     try {
-      const resp = await api.post('/ai/rag/query', payload);
-      if (resp.data && resp.data.success) {
-        const { answer, criticalKeywords, recommendedAction, sources } = resp.data;
-        
-        // Match response sources indexes to highlight chunks
-        const sourceIndexes = (sources || []).map(s => s.index);
-        setMatchedSourceIds(sourceIndexes);
+      const { data } = await api.post('/ai/rag/query', { query: query.trim() });
+      const { answer, criticalKeywords, recommendedAction, sources, provider } = data;
 
-        const chatAnswer = {
+      setMatchedSourceIds((sources || []).map((s) => s.index));
+
+      setChatHistory((prev) => [
+        {
           id: `chat-${Date.now()}`,
           question: query.trim(),
           answer,
           criticalKeywords: criticalKeywords || [],
-          recommendedAction: recommendedAction || "",
-          sources: sources || []
-        };
+          recommendedAction: recommendedAction || '',
+          sources: sources || [],
+          provider,
+        },
+        ...prev,
+      ]);
+      setQuery('');
 
-        setChatHistory(prev => [chatAnswer, ...prev]);
-        setQuery('');
-        toast.success("Semantic retrieval successful.");
+      if (provider) {
+        toast.success('Semantic retrieval successful.');
+      } else {
+        toast.warning('Retrieved matching sections, but AI synthesis is unavailable.');
       }
     } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.error || "Error querying resume database.");
+      toast.error(err.message || 'Could not query this resume.');
     } finally {
       setLoadingQuery(false);
     }
@@ -152,35 +111,40 @@ export default function ResumeRag() {
           
           {/* Document selection */}
           <div className="rounded-2xl border border-surface-border bg-app-surface p-5 shadow-sm space-y-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-app border-b border-surface-border pb-2">Target Document</h2>
-            
+            <h2 className="text-sm font-bold uppercase tracking-wider text-app border-b border-surface-border pb-2">Your Resume</h2>
+
             {loadingList ? (
-              <p className="text-xs text-app-muted">Querying resume database index...</p>
-            ) : resumesList.length === 0 ? (
-              <div className="text-center py-4 space-y-2">
-                <p className="text-xs text-app-muted italic">No cloud CV records found. Go to the "Resume Builder" page to upload or save documents to Firestore first.</p>
+              <p className="text-xs text-app-muted">Loading your resume…</p>
+            ) : !selectedResume ? (
+              <div className="space-y-2 py-4 text-center">
+                <p className="text-xs italic text-app-muted">No resume saved yet.</p>
+                <Link
+                  to="/app/resume"
+                  className="inline-block rounded-xl bg-app-gradient px-3 py-2 text-xs font-semibold text-white"
+                >
+                  Add your resume
+                </Link>
               </div>
             ) : (
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-app-muted mb-1">Select Resumes Database Instance</label>
-                <select
-                  value={selectedResumeId}
-                  onChange={handleResumeChange}
-                  className="block w-full rounded-xl border border-input-border bg-transparent p-2.5 text-xs text-app outline-none focus:border-primary dark:bg-slate-900"
-                >
-                  {resumesList.map((res) => (
-                    <option key={res.id} value={res.id}>{res.title} ({res.type === 'built' ? 'Built Editor' : 'Uploaded file'})</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            
-            {selectedResume && (
-              <div className="bg-default-bg/50 border border-surface-border rounded-xl p-3 text-xs space-y-1">
-                <p className="font-bold text-app uppercase text-[9px] tracking-wider text-primary">Metadata stats</p>
-                <p className="text-app-muted truncate">Name: <span className="font-semibold text-app">{selectedResume.title}</span></p>
-                <p className="text-app-muted">Character count: <span className="font-semibold text-app">{selectedResume.content.length}</span></p>
-                <p className="text-app-muted">Word count: <span className="font-semibold text-app">{selectedResume.content.split(/\s+/).filter(Boolean).length}</span></p>
+              <div className="space-y-1 rounded-xl border border-surface-border bg-default-bg/50 p-3 text-xs">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-primary">Indexed document</p>
+                <p className="truncate text-app-muted">
+                  Name: <span className="font-semibold text-app">{selectedResume.title}</span>
+                </p>
+                <p className="text-app-muted">
+                  Words: <span className="font-semibold text-app">{selectedResume.wordCount}</span>
+                </p>
+                <p className="text-app-muted">
+                  Search:{' '}
+                  <span className="font-semibold text-app">
+                    {selectedResume.embedding?.provider
+                      ? `semantic (${selectedResume.embedding.provider})`
+                      : 'keyword matching'}
+                  </span>
+                </p>
+                <Link to="/app/resume" className="mt-1 inline-block text-primary hover:underline">
+                  Replace or delete →
+                </Link>
               </div>
             )}
           </div>

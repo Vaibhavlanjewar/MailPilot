@@ -1,20 +1,35 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { auth } from './firebase';
 
 export const TOKEN_KEY = 'mailpilot_token';
 export const USER_KEY = 'mailpilot_user';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
-  timeout: 15000,
+  // The server's own AI cascade waits up to 30s for a local Ollama fallback;
+  // a shorter client timeout would abort requests the server was about to fulfil.
+  timeout: 35000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-api.interceptors.request.use((config) => {
-  const token =
-    typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+// Firebase ID tokens expire after ~1h; getIdToken() refreshes them transparently,
+// so always prefer it over the cached copy in localStorage.
+api.interceptors.request.use(async (config) => {
+  let token = null;
+  if (auth?.currentUser) {
+    try {
+      token = await auth.currentUser.getIdToken();
+      localStorage.setItem(TOKEN_KEY, token);
+    } catch {
+      token = null;
+    }
+  }
+  if (!token && typeof localStorage !== 'undefined') {
+    token = localStorage.getItem(TOKEN_KEY);
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -56,9 +71,7 @@ api.interceptors.response.use(
       if (
         !path.startsWith('/login') &&
         !path.startsWith('/register') &&
-        !path.startsWith('/verify-otp') &&
-        !path.startsWith('/forgot-password') &&
-        !path.startsWith('/reset-password')
+        !path.startsWith('/forgot-password')
       ) {
         window.location.href = '/';
       }

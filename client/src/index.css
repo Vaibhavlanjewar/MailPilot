@@ -71,6 +71,24 @@
     transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease,
       box-shadow 180ms ease, transform 180ms ease, opacity 180ms ease;
   }
+
+  /*
+   * `color-scheme: dark` (set on .dark above) is supposed to make the browser
+   * render native <select> option popups with a dark UI automatically, but
+   * Chromium on Windows does this inconsistently — the popup can stay
+   * white-background while our `text-app`/`text-primary` CSS variable still
+   * resolves to a light color meant for dark surfaces, producing invisible
+   * white-on-white text. Fixing it explicitly rather than trusting the
+   * browser to infer it correctly.
+   */
+  select {
+    background-color: var(--surface);
+    color: var(--text-primary);
+  }
+  select option {
+    background-color: var(--surface);
+    color: var(--text-primary);
+  }
 }
 
 @layer utilities {
@@ -209,7 +227,8 @@
     --tw-ring-color: var(--focus-ring);
   }
 
-  .shadow-app-soft {
+  .shadow-app-soft,
+  .shadow-soft {
     box-shadow: var(--soft-shadow);
   }
 

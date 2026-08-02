@@ -80,10 +80,13 @@ function resolveGmailAuth(params) {
   const owner = params?.owner;
   const authStatus = getGmailAuthStatus(owner);
   if (!authStatus.ok) {
-    if (authStatus.reason.includes("not connected")) {
-      return null;
-    }
-    throw new Error(authStatus.reason);
+    // Any unmet precondition (server app not configured, user hasn't connected
+    // Gmail, sender email missing) means "Gmail isn't usable for this send" —
+    // return null so the caller falls through to SMTP. Only campaignSend.js's
+    // explicit EMAIL_PROVIDER=gmail-api check should turn this into a hard error;
+    // this function throwing here used to short-circuit that fallback entirely.
+    logger.debug("Gmail API unavailable for this send", { reason: authStatus.reason });
+    return null;
   }
 
   const refreshToken =
@@ -115,6 +118,7 @@ function resolveGmailAuth(params) {
  *  text?: string,
  *  from: string | { name?: string, address?: string },
  *  replyTo?: string,
+ *  attachments?: { filename: string, content: Buffer, contentType?: string }[],
  * }} params
  */
 export async function sendViaGmailApi(params) {
@@ -142,6 +146,7 @@ export async function sendViaGmailApi(params) {
     html: params.html,
     text: params.text || undefined,
     ...(params.replyTo ? { replyTo: params.replyTo } : {}),
+    ...(params.attachments?.length ? { attachments: params.attachments } : {}),
     headers: {
       "X-Auto-Response-Suppress": "OOF, AutoReply",
       "List-Unsubscribe": `<mailto:${unsubscribeMailbox}>`,

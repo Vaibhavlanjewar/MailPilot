@@ -1,7 +1,6 @@
-import jwt from 'jsonwebtoken';
-import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import { User } from '../models/User.js';
+import { verifyFirebaseToken } from '../services/firebase/firebase.service.js';
 
 export async function authenticate(req, res, next) {
   const header = req.headers.authorization;
@@ -9,23 +8,35 @@ export async function authenticate(req, res, next) {
     return next(new AppError('Authentication required', 401));
   }
 
-  const token = header.slice(7);
+  let decoded;
+  try {
+    decoded = await verifyFirebaseToken(header.slice(7));
+  } catch (err) {
+    if (err.message === 'Firebase Admin is not configured') {
+      return next(new AppError('Authentication service unavailable', 503));
+    }
+    return next(new AppError('Invalid or expired token', 401));
+  }
+
+  const email = decoded.email?.trim().toLowerCase();
+  if (!email) {
+    return next(new AppError('Token is missing an email claim', 401));
+  }
 
   try {
-    const payload = jwt.verify(token, env.jwt.secret);
-    const sub = payload.sub || payload.id;
-    if (!sub) {
-      return next(new AppError('Invalid token payload', 401));
-    }
+    const user = await User.findOneAndUpdate(
+      { email },
+      {
+        $set: { firebaseUid: decoded.uid, isVerified: Boolean(decoded.email_verified) },
+        $setOnInsert: { email, name: decoded.name || '' },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
-    const userExists = await User.exists({ _id: String(sub) });
-    if (!userExists) {
-      return next(new AppError('Account not found. Please log in again.', 401));
-    }
-
-    req.userId = String(sub);
+    req.userId = user._id.toString();
+    req.user = user;
     next();
-  } catch {
-    return next(new AppError('Invalid or expired token', 401));
+  } catch (err) {
+    next(err);
   }
 }

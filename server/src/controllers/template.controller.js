@@ -3,6 +3,7 @@ import { Template } from '../models/Template.js';
 import { AppError } from '../utils/AppError.js';
 import { logger } from '../utils/logger.js';
 import { generateTemplateFromPrompt } from '../services/ai/templateAi.service.js';
+import { getUserResume } from '../services/resume.service.js';
 
 const DEFAULT_TEMPLATE_NAME = 'Software Engineer Application';
 const DEFAULT_TEMPLATE_SUBJECT = 'Application for Software Engineer Role at {{company}}';
@@ -98,12 +99,23 @@ export async function createTemplate(req, res, next) {
 
 export async function generateTemplateAi(req, res, next) {
   try {
-    const { prompt } = req.body;
-    const generated = await generateTemplateFromPrompt(prompt);
+    const { prompt, useResume = true } = req.body;
+
+    // The stored resume is folded in server-side so the client never has to
+    // ship it, and every template is personalised by default.
+    const resume = useResume ? await getUserResume(req.userId) : null;
+
+    const composedPrompt = resume?.content
+      ? `${prompt}\n\n[CANDIDATE RESUME - use these real skills, projects and metrics; do not invent others]\n${resume.content.slice(0, 12_000)}`
+      : prompt;
+
+    const generated = await generateTemplateFromPrompt(composedPrompt);
 
     res.json({
       subject: generated.subject,
       body: generated.body,
+      provider: generated.provider,
+      usedResume: Boolean(resume),
     });
   } catch (err) {
     next(err);

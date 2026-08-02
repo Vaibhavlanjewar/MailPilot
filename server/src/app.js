@@ -8,7 +8,6 @@ import { env } from "./config/env.js";
 import { createApiRateLimiter } from "./utils/rateLimiter.js";
 import campaignRoutes from "./routes/campaign.routes.js";
 import contactRoutes from "./routes/contact.routes.js";
-import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import templateRoutes from "./routes/template.routes.js";
@@ -16,6 +15,12 @@ import emailTrackingRoutes from "./routes/emailTracking.routes.js";
 import trackingRoutes from "./routes/tracking.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import resumeRoutes from "./routes/resume.routes.js";
+import roadmapRoutes from "./routes/roadmap.routes.js";
+import jobRoutes from "./routes/job.routes.js";
+import careerRoutes from "./routes/career.routes.js";
+import mockInterviewRoutes from "./routes/mockInterview.routes.js";
+import discussionRoutes from "./routes/discussion.routes.js";
+import codeRoutes from "./routes/code.routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
 const app = express();
@@ -141,6 +146,12 @@ app.use(
 );
 
 // ✅ Body parsing
+// Resume uploads carry a base64-encoded file: a 2MB PDF becomes ~2.7MB of base64
+// plus JSON overhead, so that route needs a larger limit than everything else.
+// Registered first so it claims the body for this path before the general parser
+// runs (body-parser marks the request as parsed, so the second app.use below is
+// a no-op for these requests, not a double-parse).
+app.use("/api/resumes", express.json({ limit: "4mb" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -164,7 +175,6 @@ app.get("/api/health", (req, res) => {
 });
 
 // ✅ Routes
-app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/email-tracking", emailTrackingRoutes);
@@ -173,6 +183,12 @@ app.use("/api/contacts", contactRoutes);
 app.use("/api/templates", templateRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/resumes", resumeRoutes);
+app.use("/api/roadmaps", roadmapRoutes);
+app.use("/api/jobs", jobRoutes);
+app.use("/api/career", careerRoutes);
+app.use("/api/mock-interview", mockInterviewRoutes);
+app.use("/api/discussions", discussionRoutes);
+app.use("/api/code", codeRoutes);
 app.use("/track", trackingRoutes);
 
 // ✅ Serve frontend

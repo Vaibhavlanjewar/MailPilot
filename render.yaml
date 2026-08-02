@@ -1,0 +1,127 @@
+# Render blueprint — one Web Service running the Express API and serving the
+# built React client from the same origin. A single origin keeps CORS and the
+# mock-interview WebSocket simple (no cross-domain signaling), and Render's
+# Web Service tier holds persistent WebSocket connections, which serverless
+# platforms do not.
+#
+# Secrets are NOT in this file. Every `sync: false` var must be filled in from
+# the Render dashboard (Environment tab) — see .env.render locally for the
+# values to paste. Never commit real keys here; this file is public in git.
+services:
+  - type: web
+    name: mailpilot
+    runtime: node
+    plan: free
+    # Build from the repo root: npm workspaces need both client/ and server/.
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ---- Client (public, inlined into the browser bundle at build time) ----
+      # Same-origin deploy, so a relative path is correct here.
+      - key: VITE_API_URL
+        value: /api
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+
+      # ---- Data stores ----
+      - key: MONGODB_URI
+        sync: false
+      # Upstash (or any TLS Redis) for the BullMQ email worker.
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: REDIS_TLS
+        value: "true"
+
+      # ---- Auth / crypto ----
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      # Encrypts stored per-user SMTP credentials. Must stay stable — rotating
+      # it makes every previously saved SMTP password undecryptable.
+      - key: SMTP_CREDENTIALS_ENCRYPTION_KEY
+        sync: false
+
+      # ---- Firebase Admin ----
+      # Render has no server/firebase.json, so credentials come from these.
+      # FIREBASE_PRIVATE_KEY must keep its literal \n escapes.
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+
+      # ---- Email ----
+      - key: EMAIL_PROVIDER
+        value: nodemailer
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: RUN_EMAIL_WORKER
+        value: "true"
+      - key: EMAIL_WORKER_CONCURRENCY
+        value: "1"
+      - key: EMAIL_RATE_LIMIT_MAX
+        value: "1"
+      - key: EMAIL_RATE_LIMIT_DURATION_MS
+        value: "1000"
+      - key: API_RATE_LIMIT_MAX
+        value: "200"
+
+      # ---- AI cascade (gemini -> groq -> ollama -> openai) ----
+      # Ollama is local-only and unreachable in production; the cascade already
+      # falls through past it.
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API
+        sync: false
+      - key: LANGSMITH_TRACING
+        value: "false"
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: vaibhav-ai
+
+      # ---- RapidAPI: JSearch (job board) + Judge0 CE (code sandbox) ----
+      # The account must be subscribed to BOTH APIs or those routes return 403.
+      - key: RAPIDAPI_JSEARCH_KEY
+        sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
+
+      # ---- Gmail OAuth (optional; blank disables "sign in with Google" send) ----
+      # If used, set GMAIL_REDIRECT_URI to
+      # https://<your-service>.onrender.com/api/users/gmail/callback
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REDIRECT_URI
+        sync: false
+
+      # FRONTEND_URL / BACKEND_PUBLIC_URL are intentionally omitted — both fall
+      # back to Render's injected RENDER_EXTERNAL_URL (see server/src/config/env.js).

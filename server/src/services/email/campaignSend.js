@@ -16,11 +16,11 @@ const GMAIL_TRANSPORT = {
 
 /**
  * @param {{ smtpAppPasswordEnc?: string, email?: string, name?: string, smtpUser?: string }} owner
- * @param {{ to: string, subject: string, html?: string, text?: string, from: string | import('nodemailer').Address }} params
+ * @param {{ to: string, subject: string, html?: string, text?: string, from: string | import('nodemailer').Address, attachments?: { filename: string, content: Buffer, contentType?: string }[] }} params
  * @returns {Promise<{ messageId: string, response?: string }>}
  */
 export async function sendCampaignMail(owner, params) {
-  const { to, subject, html, text, from } = params;
+  const { to, subject, html, text, from, attachments } = params;
 
   const gmailResult = await sendViaGmailApi({
     owner,
@@ -29,6 +29,7 @@ export async function sendCampaignMail(owner, params) {
     html,
     text,
     from,
+    attachments,
   });
   if (gmailResult) {
     return gmailResult;
@@ -57,6 +58,7 @@ export async function sendCampaignMail(owner, params) {
         subject,
         html,
         text: text || undefined,
+        ...(attachments?.length ? { attachments } : {}),
       });
       return { messageId: info.messageId || "", response: info.response };
     } finally {
@@ -71,5 +73,5 @@ export async function sendCampaignMail(owner, params) {
   }
 
   const provider = getEmailProvider();
-  return provider.send({ to, subject, html, text, from });
+  return provider.send({ to, subject, html, text, from, attachments });
 }

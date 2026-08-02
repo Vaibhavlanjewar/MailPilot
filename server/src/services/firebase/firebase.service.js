@@ -1,136 +1,179 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import { env } from '../../config/env.js';
+import { logger } from '../../utils/logger.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SERVER_ROOT = path.resolve(__dirname, '../../..');
 
 let app = null;
 
+/**
+ * Credentials come from a service-account JSON file when present (keeps the
+ * private key out of .env), otherwise from discrete FIREBASE_* env vars.
+ */
+function loadCredentials() {
+  const explicitPath = env.firebase.serviceAccountPath;
+  const candidates = [
+    explicitPath && path.resolve(SERVER_ROOT, explicitPath),
+    path.join(SERVER_ROOT, 'firebase.json'),
+  ].filter(Boolean);
+
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (json.type !== 'service_account' || !json.private_key) continue;
+      return {
+        source: file,
+        projectId: json.project_id,
+        clientEmail: json.client_email,
+        privateKey: json.private_key,
+      };
+    } catch (err) {
+      logger.error('Could not parse Firebase service account file', {
+        file,
+        error: err.message,
+      });
+    }
+  }
+
+  if (env.firebase.privateKey && env.firebase.projectId && env.firebase.clientEmail) {
+    return {
+      source: 'env',
+      projectId: env.firebase.projectId,
+      clientEmail: env.firebase.clientEmail,
+      privateKey: env.firebase.privateKey,
+    };
+  }
+
+  return null;
+}
+
 export function getFirebaseAdmin() {
   if (app) return app;
-  
-  const existingApps = getApps();
-  if (existingApps.length > 0) {
-    app = existingApps[0];
+
+  const [existing] = getApps();
+  if (existing) {
+    app = existing;
     return app;
   }
-  
-  if (!env.firebase.privateKey || !env.firebase.projectId) {
-    console.warn("Firebase credentials missing, firebase service is running mock store mode.");
-    return null;
+
+  const creds = loadCredentials();
+  if (!creds) return null;
+
+  // A token's `aud` claim is the project that minted it. If the Admin SDK runs
+  // under a different project every verifyIdToken call fails with a confusing
+  // "incorrect audience" error, so surface the misconfiguration up front.
+  const clientProject = env.firebase.projectId;
+  if (clientProject && creds.projectId && clientProject !== creds.projectId) {
+    logger.error(
+      `Firebase project mismatch: credentials are for "${creds.projectId}" but FIREBASE_PROJECT_ID is "${clientProject}". ` +
+        'The browser SDK and Admin SDK must use the same project or every login will be rejected.',
+      { credentialSource: creds.source },
+    );
   }
-  
+
   try {
     app = initializeApp({
       credential: cert({
-        projectId: env.firebase.projectId,
-        clientEmail: env.firebase.clientEmail,
-        privateKey: env.firebase.privateKey
-      })
+        projectId: creds.projectId,
+        clientEmail: creds.clientEmail,
+        privateKey: creds.privateKey,
+      }),
     });
-    console.log("Firebase Admin initialized successfully.");
+    logger.info('Firebase Admin initialized', {
+      projectId: creds.projectId,
+      credentialSource: creds.source === 'env' ? 'env vars' : path.basename(creds.source),
+    });
     return app;
   } catch (err) {
-    console.error("Firebase admin init error:", err);
+    logger.error('Firebase Admin init failed', { error: err.message });
     return null;
   }
 }
 
-// Get Firestore DB reference
-export function getFirestoreDB() {
+export function verifyFirebaseToken(idToken) {
   const adminApp = getFirebaseAdmin();
-  if (!adminApp) return null;
+  if (!adminApp) {
+    throw new Error('Firebase Admin is not configured');
+  }
+  return getAuth(adminApp).verifyIdToken(idToken);
+}
+
+function getBucket() {
+  const adminApp = getFirebaseAdmin();
+  if (!adminApp || !env.firebase.storageBucket) return null;
   try {
-    return getFirestore(adminApp);
+    return getStorage(adminApp).bucket(env.firebase.storageBucket);
   } catch (err) {
-    console.error("Firebase Firestore get db error:", err);
+    logger.error('Firebase Storage unavailable', { error: err.message });
     return null;
   }
 }
 
-// Local mock backing fallback if firebase keys are invalid (local-first resilience)
-const localFallbackResumes = new Map();
-
-export async function saveUserResumeToFirebase(userId, resumeData) {
-  const db = getFirestoreDB();
-  const resumeId = resumeData.id || `res-${Math.floor(1000 + Math.random() * 9000)}`;
-  const entry = { ...resumeData, id: resumeId, userId, updatedAt: new Date().toISOString() };
-
-  if (!db) {
-    console.warn("Using offline mock persistence for saveUserResumeToFirebase");
-    if (!localFallbackResumes.has(userId)) {
-      localFallbackResumes.set(userId, []);
-    }
-    const current = localFallbackResumes.get(userId).filter(r => r.id !== resumeId);
-    current.unshift(entry);
-    localFallbackResumes.set(userId, current);
-    return entry;
-  }
-
-  try {
-    const docRef = db.collection('resumes').doc(resumeId);
-    await docRef.set(entry);
-    return entry;
-  } catch (err) {
-    console.error("Firebase Firestore save error, falling back to local fallback store:", err);
-    if (!localFallbackResumes.has(userId)) {
-      localFallbackResumes.set(userId, []);
-    }
-    const current = localFallbackResumes.get(userId).filter(r => r.id !== resumeId);
-    current.unshift(entry);
-    localFallbackResumes.set(userId, current);
-    return entry;
-  }
+export function isStorageConfigured() {
+  return Boolean(env.firebase.storageBucket && getFirebaseAdmin());
 }
 
-export async function getUserResumesFromFirebase(userId) {
-  const db = getFirestoreDB();
-  if (!db) {
-    console.warn("Using offline mock persistence for getUserResumesFromFirebase");
-    return localFallbackResumes.get(userId) || [];
-  }
+/**
+ * Stores a resume binary at a deterministic path so re-uploading overwrites the
+ * previous file instead of accumulating orphans.
+ *
+ * @returns {Promise<{storagePath: string, fileUrl: string} | null>}
+ */
+export async function uploadResumeFile(userId, buffer, { fileName, mimeType }) {
+  const bucket = getBucket();
+  if (!bucket) return null;
+
+  const extension = (fileName?.split('.').pop() || 'pdf').toLowerCase();
+  const storagePath = `resumes/${userId}/resume.${extension}`;
 
   try {
-    const snapshot = await db.collection('resumes')
-      .where('userId', '==', userId)
-      .orderBy('updatedAt', 'desc')
-      .get();
-    
-    const results = [];
-    snapshot.forEach(doc => {
-      results.push(doc.data());
+    const file = bucket.file(storagePath);
+    await file.save(buffer, {
+      contentType: mimeType || 'application/pdf',
+      resumable: false,
+      metadata: { metadata: { originalName: fileName || '' } },
     });
-    return results;
+    return { storagePath, fileUrl: `gs://${bucket.name}/${storagePath}` };
   } catch (err) {
-    console.error("Firebase Firestore query error, falling back to local fallback store:", err);
-    // fallback to blank if DB query crashes (e.g. database indexing is building)
-    return localFallbackResumes.get(userId) || [];
+    logger.error('Resume upload to Firebase Storage failed', { error: err.message });
+    return null;
   }
 }
 
-export async function deleteUserResumeFromFirebase(userId, resumeId) {
-  const db = getFirestoreDB();
-  if (!db) {
-    console.warn("Using offline mock persistence for deleteUserResumeFromFirebase");
-    if (localFallbackResumes.has(userId)) {
-      const current = localFallbackResumes.get(userId).filter(r => r.id !== resumeId);
-      localFallbackResumes.set(userId, current);
-    }
-    return true;
-  }
-
+export async function downloadResumeFile(storagePath) {
+  const bucket = getBucket();
+  if (!bucket || !storagePath) return null;
   try {
-    const docRef = db.collection('resumes').doc(resumeId);
-    const doc = await docRef.get();
-    if (doc.exists && doc.data().userId === userId) {
-      await docRef.delete();
-      return true;
-    }
-    return false;
+    const [buffer] = await bucket.file(storagePath).download();
+    return buffer;
   } catch (err) {
-    console.error("Firebase Firestore delete error, falling back to local fallback store:", err);
-    if (localFallbackResumes.has(userId)) {
-      const current = localFallbackResumes.get(userId).filter(r => r.id !== resumeId);
-      localFallbackResumes.set(userId, current);
-    }
+    logger.error('Resume download from Firebase Storage failed', {
+      storagePath,
+      error: err.message,
+    });
+    return null;
+  }
+}
+
+/** Best-effort delete; a missing object is treated as already gone. */
+export async function deleteResumeFile(storagePath) {
+  const bucket = getBucket();
+  if (!bucket || !storagePath) return false;
+  try {
+    await bucket.file(storagePath).delete({ ignoreNotFound: true });
     return true;
+  } catch (err) {
+    logger.error('Resume delete from Firebase Storage failed', {
+      storagePath,
+      error: err.message,
+    });
+    return false;
   }
 }

@@ -5,7 +5,9 @@ import Card, { CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input, { Label } from '../components/ui/Input';
 import ThemeToggle from '../components/ui/ThemeToggle';
-import { api, getAuthToken } from '../services/api';
+import { getAuthToken } from '../services/api';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, firebaseConfigError } from '../services/firebase';
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -23,12 +25,13 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
+      if (!auth) throw new Error(firebaseConfigError);
       const normalizedEmail = email.trim().toLowerCase();
-      const { data } = await api.post('/auth/forgot-password', { email: normalizedEmail });
-      toast.success(data?.message || 'OTP sent');
-      navigate(`/reset-password?email=${encodeURIComponent(normalizedEmail)}`);
+      await sendPasswordResetEmail(auth, normalizedEmail);
+      toast.success('Password reset email sent. Please check your inbox.');
+      navigate('/login', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send OTP');
+      setError(err instanceof Error ? err.message : 'Could not send reset email');
     } finally {
       setLoading(false);
     }

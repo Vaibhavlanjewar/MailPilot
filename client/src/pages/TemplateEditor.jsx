@@ -5,6 +5,7 @@ import Button from "../components/ui/Button";
 import Input, { Label, TextArea } from "../components/ui/Input";
 import HtmlPreview, { HtmlViewModeToggle } from "../components/HtmlPreview";
 import { PageLoader } from "../components/ui/LoadingSpinner";
+import ProviderBadge from "../components/ui/ProviderBadge";
 import { api } from "../services/api";
 
 export default function TemplateEditor() {
@@ -21,10 +22,11 @@ export default function TemplateEditor() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
-  const [isAiBtnHover, setIsAiBtnHover] = useState(false);
   const [followUpMode, setFollowUpMode] = useState(false);
   const [lastPrompt, setLastPrompt] = useState("");
   const [generationCount, setGenerationCount] = useState(0);
+  const [aiProvider, setAiProvider] = useState(null);
+  const [usedResume, setUsedResume] = useState(false);
 
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -83,6 +85,8 @@ export default function TemplateEditor() {
       setBodyView("edit");
       setLastPrompt(promptInput);
       setGenerationCount((n) => n + 1);
+      setAiProvider(data?.provider || null);
+      setUsedResume(Boolean(data?.usedResume));
     } catch (err) {
       setAiError(
         err instanceof Error ? err.message : "Could not generate template",
@@ -148,17 +152,13 @@ export default function TemplateEditor() {
               type="button"
               variant="primary"
               size="sm"
-              title="Coming soon"
-              aria-disabled="true"
-              className="w-[170px] cursor-not-allowed"
-              onMouseEnter={() => setIsAiBtnHover(true)}
-              onMouseLeave={() => setIsAiBtnHover(false)}
+              className="w-[170px]"
               onClick={(e) => {
                 e.preventDefault();
-                setAiEnabled(false);
+                setAiEnabled((v) => !v);
               }}
             >
-              {isAiBtnHover ? "Coming soon" : "Customize with AI"}
+              {aiEnabled ? "Hide AI panel" : "Customize with AI"}
             </Button>
           </div>
           {!isEdit ? (
@@ -219,9 +219,26 @@ export default function TemplateEditor() {
               Follow-up mode (update current Subject + Body)
             </label>
             {generationCount > 0 ? (
-              <p className="mb-2 text-xs text-emerald-700 dark:text-emerald-300">
-                Last AI update applied. Ask your follow-up in this box and click Generate again.
-              </p>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                  Last AI update applied. Ask your follow-up below and generate again.
+                </p>
+                <ProviderBadge provider={aiProvider} />
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                    usedResume
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  }`}
+                  title={
+                    usedResume
+                      ? 'Your saved resume was used to personalise this template'
+                      : 'Add a resume under My Resume to personalise future templates'
+                  }
+                >
+                  {usedResume ? 'Personalised from your resume' : 'No resume on file'}
+                </span>
+              </div>
             ) : null}
             <TextArea
               id="ai-prompt"

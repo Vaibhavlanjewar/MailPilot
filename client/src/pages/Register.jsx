@@ -6,6 +6,7 @@ import Button from '../components/ui/Button';
 import Input, { Label } from '../components/ui/Input';
 import PasswordInput from '../components/ui/PasswordInput';
 import { useAuth } from '../context/AuthContext';
+import { firebaseConfigError } from '../services/firebase';
 import { getAuthToken } from '../services/api';
 import { PageLoader } from '../components/ui/LoadingSpinner';
 import ThemeToggle from '../components/ui/ThemeToggle';
@@ -17,7 +18,7 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(firebaseConfigError || '');
   const [loading, setLoading] = useState(false);
 
   if (!ready) {
@@ -37,13 +38,13 @@ export default function Register() {
     setError('');
     setLoading(true);
     try {
-      const data = await register({
+      await register({
         email: email.trim(),
         password,
         name: name.trim(),
       });
-      toast.success(data?.message || 'OTP sent to your email');
-      navigate(`/verify-otp?email=${encodeURIComponent(email.trim())}&purpose=register`);
+      toast.success('Account created successfully');
+      navigate('/app', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

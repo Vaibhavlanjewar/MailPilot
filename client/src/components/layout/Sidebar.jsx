@@ -1,27 +1,61 @@
 import { Link, NavLink } from 'react-router-dom';
 import { cn } from '../../utils/cn';
+import { useAuth } from '../../context/AuthContext';
+import { LIVE_PRACTICE_ROOM_ENABLED } from '../../config/features';
 
 const googleFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSff_YjvIVpgc6umn0zl3mihp7dvTYztqREbj_HElb70wCpXaw/viewform?usp=publish-editor';
 
-const nav = [
-  { to: '/app', label: 'Dashboard', end: true, icon: LayoutIcon },
-  { to: '/app/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
-  { to: '/app/contacts', label: 'Contacts', icon: UsersIcon },
-  { to: '/app/templates', label: 'Templates', icon: DocumentIcon },
-  { to: '/app/ai-assistant', label: 'AI Recruiter', icon: SparklesIcon },
-  { to: '/app/job-search', label: 'Job Search', icon: BriefcaseIcon },
-  { to: '/app/interview-prep', label: 'Interview Prep', icon: AcademicCapIcon },
-  { to: '/app/post-job', label: 'Post a Job', icon: DocumentPlusIcon },
-  { to: '/app/community', label: 'Discussion Forum', icon: ChatBubbleIcon },
-  { to: '/app/resume-builder', label: 'Resume Builder', icon: DocumentTextIcon },
-  { to: '/app/resume-rag', label: 'Resume Chat (RAG)', icon: ChatQuestionIcon },
-  { to: '/app/analytics', label: 'Analytics', icon: ChartIcon },
-  { to: '/app/email-tracking', label: 'Email Tracking', icon: TrackingIcon },
-  { to: '/app/settings', label: 'Settings', icon: CogIcon },
-  { to: '/app/how-to-use', label: 'How To Use', icon: GuideIcon },
+/** Grouped by job-to-be-done: sending outreach vs. preparing for roles. */
+const navSections = [
+  {
+    heading: 'Outreach',
+    items: [
+      { to: '/app/resume', label: 'My Resume', icon: DocumentTextIcon },
+      { to: '/app', label: 'Dashboard', end: true, icon: LayoutIcon },
+      { to: '/app/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
+      { to: '/app/contacts', label: 'Recipients', icon: UsersIcon },
+      { to: '/app/templates', label: 'Email Templates', icon: DocumentIcon },
+      { to: '/app/email-tracking', label: 'Delivery & Opens', icon: TrackingIcon },
+      { to: '/app/analytics', label: 'Analytics', icon: ChartIcon },
+      { to: '/app/settings?section=gmail', label: 'Email Sending Setup', icon: CogIcon },
+    ],
+  },
+  {
+    heading: 'Career',
+    items: [
+      { to: '/app/resume-chat', label: 'Ask My Resume', icon: ChatQuestionIcon },
+      { to: '/app/career-fit', label: 'Career Fit', icon: CompassIcon },
+      { to: '/app/interview-prep', label: 'Interview Prep', icon: AcademicCapIcon },
+      { to: '/app/mock-interview', label: 'Live Practice Room', icon: VideoIcon, soon: !LIVE_PRACTICE_ROOM_ENABLED },
+      { to: '/app/roadmap', label: 'Learning Roadmap', icon: RoadmapIcon },
+      { to: '/app/jobs', label: 'Job Board', icon: BriefcaseIcon },
+      { to: '/app/community', label: 'Community', icon: ChatBubbleIcon },
+    ],
+  },
 ];
 
+const accountSection = {
+  heading: 'Account',
+  items: [
+    { to: '/app/settings', label: 'Settings', icon: CogIcon },
+    { to: '/app/how-to-use', label: 'How To Use', icon: GuideIcon },
+  ],
+};
+
+const recruiterSection = {
+  heading: 'Recruiter',
+  items: [
+    { to: '/app/post-job', label: 'Post a Job', icon: DocumentPlusIcon },
+    { to: '/app/my-postings', label: 'My Postings', icon: BriefcaseIcon },
+  ],
+};
+
 export default function Sidebar({ open, onClose }) {
+  const { isRecruiter } = useAuth();
+  const sections = isRecruiter
+    ? [...navSections, recruiterSection, accountSection]
+    : [...navSections, accountSection];
+
   return (
     <>
       <div
@@ -46,25 +80,46 @@ export default function Sidebar({ open, onClose }) {
             <p className="text-sm font-semibold text-app">MailPilot</p>
           </Link>
         </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto p-3 scrollbar-thin">
-          {nav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={onClose}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                  isActive
-                    ? 'bg-[color:rgba(var(--primary-rgb),0.12)] text-[var(--primary)]'
-                    : 'text-app-muted hover:bg-app-muted hover:text-app'
+        <nav className="flex-1 overflow-y-auto p-3 scrollbar-thin">
+          {sections.map((section) => (
+            <div key={section.heading} className="mb-4 space-y-0.5">
+              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-app-muted/70">
+                {section.heading}
+              </p>
+              {section.items.map((item) =>
+                item.soon ? (
+                  <div
+                    key={item.to}
+                    aria-disabled="true"
+                    className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-app-muted/50"
+                  >
+                    <item.icon className="h-5 w-5 shrink-0 opacity-50" />
+                    <span className="flex-1">{item.label}</span>
+                    <span className="rounded-full bg-app-muted px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-app-muted">
+                      Soon
+                    </span>
+                  </div>
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                        isActive
+                          ? 'bg-[color:rgba(var(--primary-rgb),0.12)] text-[var(--primary)]'
+                          : 'text-app-muted hover:bg-app-muted hover:text-app'
+                      )
+                    }
+                  >
+                    <item.icon className="h-5 w-5 shrink-0 opacity-80" />
+                    {item.label}
+                  </NavLink>
                 )
-              }
-            >
-              <item.icon className="h-5 w-5 shrink-0 opacity-80" />
-              {item.label}
-            </NavLink>
+              )}
+            </div>
           ))}
           <a
             href={googleFormUrl}
@@ -173,6 +228,32 @@ function FeedbackIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3h6m-9.75 8.25L5.1 15.9a2.25 2.25 0 011.591-.659h10.56A2.25 2.25 0 0019.5 13V6.75A2.25 2.25 0 0017.25 4.5H6.75A2.25 2.25 0 004.5 6.75v10.5A2.25 2.25 0 006.75 19.5z" />
+    </svg>
+  );
+}
+
+function VideoIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+    </svg>
+  );
+}
+
+function CompassIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+    </svg>
+  );
+}
+
+function RoadmapIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 4.5v4.5m0 0a2.25 2.25 0 100 4.5 2.25 2.25 0 000-4.5zm0 4.5v6" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 19.5V15m0 0a2.25 2.25 0 100-4.5 2.25 2.25 0 000 4.5zm0-4.5v-6" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75h6M9 17.25h6" />
     </svg>
   );
 }

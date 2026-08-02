@@ -5,6 +5,12 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Maps to the theme-aware CSS custom properties in index.css (flips
+        // between :root and .dark automatically). Without this, `bg-primary`,
+        // `border-primary`, etc. were never registered as real Tailwind
+        // utilities and silently generated no CSS at all across the app.
+        primary: 'var(--primary)',
+        secondary: 'var(--secondary)',
         brand: {
           50: '#eef2ff',
           100: '#e0e7ff',

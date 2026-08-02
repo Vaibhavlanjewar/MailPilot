@@ -39,6 +39,7 @@ export async function verifyRedisConnection() {
     host: env.redis.host,
     port: env.redis.port,
     password: env.redis.password || undefined,
+    tls: env.redis.tls ? {} : undefined,
     maxRetriesPerRequest: 1,
     connectTimeout: 5000,
     lazyConnect: true,
@@ -77,6 +78,7 @@ export function createRedisConnection() {
     host: env.redis.host,
     port: env.redis.port,
     password: env.redis.password,
+    tls: env.redis.tls ? {} : undefined,
     maxRetriesPerRequest: null,
   });
 }

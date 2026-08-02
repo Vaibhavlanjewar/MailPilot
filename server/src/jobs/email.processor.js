@@ -5,6 +5,7 @@ import { Contact } from "../models/Contact.js";
 import { EmailLog } from "../models/EmailLog.js";
 import { User } from "../models/User.js";
 import { sendCampaignMail } from "../services/email/campaignSend.js";
+import { getUserResumeAttachment } from "../services/resume.service.js";
 import { env } from "../config/env.js";
 import { maybeFinishCampaign } from "../services/campaign.queue.service.js";
 import { resolveCampaignFrom } from "../utils/mailFrom.js";
@@ -83,6 +84,18 @@ export async function processEmailJob(job) {
   const trackingUrl = `${trackingBase}/track?token=${encodeURIComponent(trackingToken)}`;
   const trackedHtml = appendTrackingPixel(html, trackingUrl);
 
+  // Best-effort: a missing/unavailable resume should never block the send.
+  const resumeFile = await getUserResumeAttachment(campaign.userId).catch((err) => {
+    logger.warn("Could not attach resume to outreach email", {
+      userId: String(campaign.userId),
+      error: err.message,
+    });
+    return null;
+  });
+  const attachments = resumeFile
+    ? [{ filename: resumeFile.filename, content: resumeFile.content, contentType: resumeFile.contentType }]
+    : undefined;
+
   try {
     const result = await sendCampaignMail(owner, {
       to: log.toEmail,
@@ -90,6 +103,7 @@ export async function processEmailJob(job) {
       html: trackedHtml,
       text,
       from,
+      attachments,
     });
 
     await EmailLog.findByIdAndUpdate(emailLogId, {

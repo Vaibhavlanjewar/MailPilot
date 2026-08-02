@@ -3,14 +3,23 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
+// Single .env at the repo root serves both workspaces; server/.env still wins
+// if present, so a platform-specific override stays possible.
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+
+// Firebase creds are not listed here because they may come from a service-account
+// JSON file instead of env vars; server.js verifies the Admin SDK actually starts.
 const requiredInProd = ["MONGODB_URI", "JWT_SECRET", "REDIS_HOST"];
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT) || 4000,
-  frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+  frontendUrl:
+    process.env.FRONTEND_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    "http://localhost:5173",
   backendPublicUrl:
     process.env.BACKEND_PUBLIC_URL ||
     process.env.RENDER_EXTERNAL_URL ||
@@ -20,6 +29,8 @@ export const env = {
     host: process.env.REDIS_HOST || "127.0.0.1",
     port: Number(process.env.REDIS_PORT) || 6379,
     password: process.env.REDIS_PASSWORD || undefined,
+    /** Hosted Redis (e.g. Upstash) requires TLS; local/docker Redis does not. */
+    tls: process.env.REDIS_TLS === "true",
   },
   jwt: {
     secret: process.env.JWT_SECRET || "dev-only-change-me",
@@ -108,6 +119,8 @@ export const env = {
   ai: {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    groqApiKey: process.env.GROQ_API || process.env.GROQ_API_KEY || '',
+    groqModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
     googleApiKey: process.env.GOOGLE_API_KEY || '',
     langsmith: {
       tracing: process.env.LANGSMITH_TRACING === 'true',
@@ -116,10 +129,19 @@ export const env = {
       project: process.env.LANGSMITH_PROJECT || 'vaibhav-ai',
     }
   },
+  jobs: {
+    /** JSearch on RapidAPI — external listings for the job board. */
+    rapidApiJsearchKey: process.env.RAPIDAPI_JSEARCH_KEY || '',
+  },
   firebase: {
-    projectId: process.env.FIREBASE_PROJECT_ID || 'mailpilot-e0424',
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL || 'firebase-adminsdk-fbsvc@mailpilot-e0424.iam.gserviceaccount.com',
-    privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
+    projectId: process.env.FIREBASE_PROJECT_ID || '',
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
+    privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    /** Path to a service-account JSON, relative to server/. Takes precedence over the vars above. */
+    serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
+    /** Storage bucket for resume binaries; falls back to the client-side value. */
+    storageBucket:
+      process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
   }
 };
 

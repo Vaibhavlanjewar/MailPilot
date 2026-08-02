@@ -17,6 +17,19 @@ function normalizeName(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+const CSV_TEMPLATE =
+  'name,email,company\nJane Doe,jane@example.com,Acme Inc\nJohn Smith,john@example.com,Globex Corp\n';
+
+function downloadCsvTemplate() {
+  const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'mailpilot-contacts-template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function makeEditDraft(contact) {
   return {
     name: contact?.name || "",
@@ -496,7 +509,7 @@ export default function Contacts() {
       <Card>
         <CardHeader
           title="Import contacts"
-          description="Upload a CSV with an email column (optional name column)."
+          description="Two ways to add people to email: upload a CSV, or type them in one by one."
           action={
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -518,22 +531,34 @@ export default function Contacts() {
             </div>
           }
         />
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="inline-flex cursor-pointer">
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              className="sr-only"
-              onChange={handleFile}
-              disabled={uploadBusy}
-            />
-            <span className="inline-flex rounded-lg border border-surface-border bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
-              {uploadBusy ? "Uploading…" : "Upload CSV"}
-            </span>
-          </label>
-          <p className="text-sm text-slate-500">
-            Files are sent to the server and merged with your list.
-          </p>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                onChange={handleFile}
+                disabled={uploadBusy}
+              />
+              <span className="inline-flex rounded-lg border border-surface-border bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+                {uploadBusy ? "Uploading…" : "Upload CSV"}
+              </span>
+            </label>
+            <Button type="button" variant="ghost" size="sm" onClick={downloadCsvTemplate}>
+              Download CSV template
+            </Button>
+          </div>
+          <div className="rounded-lg border border-surface-border bg-app-muted/40 px-4 py-3 text-xs text-slate-500">
+            <p className="font-medium text-slate-700 dark:text-slate-300">Expected format — first row is the header, one contact per row:</p>
+            <code className="mt-1 block rounded bg-slate-900/5 px-2 py-1 font-mono text-[11px] dark:bg-white/5">
+              name,email,company
+            </code>
+            <p className="mt-1">
+              Only <span className="font-semibold">email</span> is required — name and company are optional.
+              Not sure of the format? Download the template above, fill it in, and upload it back.
+            </p>
+          </div>
         </div>
 
         {showManualAdd && (

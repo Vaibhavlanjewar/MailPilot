@@ -3,14 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
-import { api } from '../../services/api';
 
 export default function Navbar({ onMenuClick, title }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [hasGmailRefreshToken, setHasGmailRefreshToken] = useState(false);
-  const [gmailActionLoading, setGmailActionLoading] = useState(false);
   const ref = useRef(null);
 
   const initials = useMemo(() => {
@@ -30,58 +27,15 @@ export default function Navbar({ onMenuClick, title }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-
-    let cancelled = false;
-    async function loadGmailStatus() {
-      try {
-        const { data } = await api.get('/users/me/settings');
-        if (!cancelled) {
-          setHasGmailRefreshToken(Boolean(data?.hasGmailRefreshToken));
-        }
-      } catch {
-        if (!cancelled) {
-          setHasGmailRefreshToken(false);
-        }
-      }
-    }
-
-    loadGmailStatus();
-    return () => {
-      cancelled = true;
-    };
-  }, [menuOpen]);
-
   function handleLogout() {
     setMenuOpen(false);
     logout();
     navigate('/');
   }
 
-  function goToSettingsSection(section) {
+  function goToSettings() {
     setMenuOpen(false);
-    navigate(`/app/settings?section=${section}`);
-  }
-
-  async function handleGmailAction() {
-    setGmailActionLoading(true);
-    try {
-      if (hasGmailRefreshToken) {
-        await api.patch('/users/me/settings', { gmailRefreshToken: '' });
-        setHasGmailRefreshToken(false);
-      } else {
-        const { data } = await api.get('/users/me/gmail/connect-url');
-        if (!data?.url) {
-          throw new Error('Could not get Gmail connect URL.');
-        }
-        setMenuOpen(false);
-        window.location.assign(data.url);
-        return;
-      }
-    } finally {
-      setGmailActionLoading(false);
-    }
+    navigate('/app/settings');
   }
 
   return (
@@ -129,31 +83,10 @@ export default function Navbar({ onMenuClick, title }) {
             <div className="absolute right-0 mt-2 w-52 origin-top-right rounded-2xl border border-app bg-app-surface py-1 shadow-app-elevated">
               <button
                 type="button"
-                onClick={handleGmailAction}
-                disabled={gmailActionLoading}
+                onClick={goToSettings}
                 className="flex w-full px-4 py-2.5 text-left text-sm text-app hover:bg-app-muted"
               >
-                <span
-                  className={cn(
-                    'mr-2 mt-[5px] inline-block h-2 w-2 shrink-0 rounded-full',
-                    hasGmailRefreshToken ? 'bg-emerald-500' : 'bg-rose-500'
-                  )}
-                  aria-hidden="true"
-                />
-                <span>
-                  {gmailActionLoading
-                    ? 'Please wait...'
-                    : hasGmailRefreshToken
-                      ? 'Gmail connected'
-                      : 'Connect with Gmail'}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => goToSettingsSection('password')}
-                className="flex w-full px-4 py-2.5 text-left text-sm text-app hover:bg-app-muted"
-              >
-                Change password
+                Settings
               </button>
               <hr className="my-1 border-app" />
               <button
