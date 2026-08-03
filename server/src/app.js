@@ -23,6 +23,7 @@ import careerRoutes from "./routes/career.routes.js";
 import mockInterviewRoutes from "./routes/mockInterview.routes.js";
 import discussionRoutes from "./routes/discussion.routes.js";
 import codeRoutes from "./routes/code.routes.js";
+import feedbackRoutes from "./routes/feedback.routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
 const app = express();
@@ -265,6 +266,7 @@ app.use("/api/career", careerRoutes);
 app.use("/api/mock-interview", mockInterviewRoutes);
 app.use("/api/discussions", discussionRoutes);
 app.use("/api/code", codeRoutes);
+app.use("/api/feedback", feedbackRoutes);
 app.use("/track", trackingRoutes);
 
 // ✅ Serve frontend

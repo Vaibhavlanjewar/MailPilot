@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import ThemeToggle from "../components/ui/ThemeToggle";
 import { useAuth } from "../context/AuthContext";
+import FeedbackModal from "../components/FeedbackModal";
 
 const features = [
   {
@@ -52,13 +53,11 @@ const upcomingFeatures = [
   },
 ];
 
-const googleFormUrl =
-  "https://docs.google.com/forms/d/e/1FAIpQLSff_YjvIVpgc6umn0zl3mihp7dvTYztqREbj_HElb70wCpXaw/viewform?usp=publish-editor";
-
 export default function Landing() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const velocityRef = useRef(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [velocityAnimCycle, setVelocityAnimCycle] = useState(0);
 
   function handleUpcomingCardClick(title) {
@@ -128,14 +127,13 @@ export default function Landing() {
             >
               Testimonials
             </a>
-            <a
-              href={googleFormUrl}
-              target="_blank"
-              rel="noreferrer noopener"
+            <button
+              type="button"
+              onClick={() => setFeedbackOpen(true)}
               className="transition-colors hover:text-[var(--text-primary)]"
             >
               Feedback
-            </a>
+            </button>
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
@@ -364,6 +362,7 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </div>
   );
 }

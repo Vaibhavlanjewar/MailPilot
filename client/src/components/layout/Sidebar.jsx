@@ -1,9 +1,9 @@
+import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { useAuth } from '../../context/AuthContext';
 import { LIVE_PRACTICE_ROOM_ENABLED } from '../../config/features';
-
-const googleFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSff_YjvIVpgc6umn0zl3mihp7dvTYztqREbj_HElb70wCpXaw/viewform?usp=publish-editor';
+import FeedbackModal from '../FeedbackModal';
 
 /** Grouped by job-to-be-done: sending outreach vs. preparing for roles. */
 const navSections = [
@@ -52,6 +52,7 @@ const recruiterSection = {
 
 export default function Sidebar({ open, onClose }) {
   const { isRecruiter } = useAuth();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const sections = isRecruiter
     ? [...navSections, recruiterSection, accountSection]
     : [...navSections, accountSection];
@@ -121,16 +122,14 @@ export default function Sidebar({ open, onClose }) {
               )}
             </div>
           ))}
-          <a
-            href={googleFormUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            onClick={onClose}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-app-muted transition-all duration-200 hover:bg-app-muted hover:text-app"
+          <button
+            type="button"
+            onClick={() => setFeedbackOpen(true)}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-app-muted transition-all duration-200 hover:bg-app-muted hover:text-app"
           >
             <FeedbackIcon className="h-5 w-5 shrink-0 opacity-80" />
             Feedback
-          </a>
+          </button>
         </nav>
         <div className="border-t border-app p-4">
           <Link
@@ -146,6 +145,7 @@ export default function Sidebar({ open, onClose }) {
           </Link>
         </div>
       </aside>
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </>
   );
 }
