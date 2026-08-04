@@ -30,12 +30,8 @@ const userSchema = new mongoose.Schema(
     smtpUser: { type: String, trim: true, lowercase: true, default: "" },
     /** Shown in From: "Name" <smtpUser|email> — e.g. MailChips */
     smtpFromDisplayName: { type: String, trim: true, default: "" },
-    /** AES-GCM encrypted app password (never returned to clients). */
-    smtpAppPasswordEnc: { type: String, select: false, default: "" },
     /** AES-GCM encrypted Gmail OAuth refresh token (never returned to clients). */
     gmailRefreshTokenEnc: { type: String, select: false, default: "" },
-    /** Scrypt hash of a 4-digit PIN gating Email Sending Setup. Never reversible. */
-    securityPinHash: { type: String, select: false, default: "" },
   },
   { timestamps: true },
 );

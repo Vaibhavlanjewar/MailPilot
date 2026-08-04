@@ -57,30 +57,3 @@ export function decryptSecret(blob) {
   }
 }
 
-const PIN_SALT_LEN = 16;
-const PIN_HASH_LEN = 32;
-
-/**
- * One-way hash for the security PIN (scrypt + per-PIN random salt). Unlike
- * encryptSecret above, a PIN only ever needs to be *verified*, never read
- * back — hashing is the correct primitive here, not reversible encryption.
- */
-export function hashPin(pin) {
-  const salt = crypto.randomBytes(PIN_SALT_LEN);
-  const hash = crypto.scryptSync(String(pin), salt, PIN_HASH_LEN);
-  return Buffer.concat([salt, hash]).toString('base64');
-}
-
-export function verifyPin(pin, storedHash) {
-  if (!storedHash || typeof storedHash !== 'string') return false;
-  try {
-    const buf = Buffer.from(storedHash, 'base64');
-    if (buf.length !== PIN_SALT_LEN + PIN_HASH_LEN) return false;
-    const salt = buf.subarray(0, PIN_SALT_LEN);
-    const expected = buf.subarray(PIN_SALT_LEN);
-    const actual = crypto.scryptSync(String(pin), salt, PIN_HASH_LEN);
-    return crypto.timingSafeEqual(expected, actual);
-  } catch {
-    return false;
-  }
-}

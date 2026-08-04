@@ -1,21 +1,18 @@
-import nodemailer from "nodemailer";
 import { env } from "../../config/env.js";
 import { getEmailProvider } from "./index.js";
-import { decryptSecret } from "../../utils/secretCrypto.js";
-import { getSmtpConnectionOptions } from "../../utils/smtpConnectionOptions.js";
 import { sendViaGmailApi } from "./gmailApi.provider.js";
 
-/** Google SMTP — works for @gmail.com and Google Workspace. */
-const GMAIL_TRANSPORT = {
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  requireTLS: true,
-  ...getSmtpConnectionOptions(),
-};
-
 /**
- * @param {{ smtpAppPasswordEnc?: string, email?: string, name?: string, smtpUser?: string }} owner
+ * Sends over the Gmail API (HTTPS), which is the only per-user path — the
+ * previous per-user "Gmail app password" option was removed because it needs
+ * outbound SMTP on 587/465, and cloud hosts (Render included) block those
+ * ports outright. It failed with connection timeouts in production while
+ * looking correctly configured in the UI.
+ *
+ * The SMTP_HOST fallback below is server-level config, not per-user, and
+ * stays for self-hosting and local development.
+ *
+ * @param {{ gmailRefreshTokenEnc?: string, email?: string, name?: string, smtpUser?: string }} owner
  * @param {{ to: string, subject: string, html?: string, text?: string, from: string | import('nodemailer').Address, attachments?: { filename: string, content: Buffer, contentType?: string }[] }} params
  * @returns {Promise<{ messageId: string, response?: string }>}
  */
@@ -41,34 +38,9 @@ export async function sendCampaignMail(owner, params) {
     );
   }
 
-  const enc = owner?.smtpAppPasswordEnc;
-  const pass = enc ? decryptSecret(enc) : null;
-  const authUser =
-    (owner?.smtpUser && String(owner.smtpUser).trim()) || owner?.email?.trim();
-
-  if (pass && authUser) {
-    const transport = nodemailer.createTransport({
-      ...GMAIL_TRANSPORT,
-      auth: { user: authUser, pass },
-    });
-    try {
-      const info = await transport.sendMail({
-        from,
-        to,
-        subject,
-        html,
-        text: text || undefined,
-        ...(attachments?.length ? { attachments } : {}),
-      });
-      return { messageId: info.messageId || "", response: info.response };
-    } finally {
-      transport.close();
-    }
-  }
-
   if (!env.email.smtp.host) {
     throw new Error(
-      "Configure SMTP in Settings (SMTP user, app password, sender name) or set SMTP_HOST in server .env.",
+      "Gmail is not connected. Open Settings and use Connect Gmail to authorise sending.",
     );
   }
 

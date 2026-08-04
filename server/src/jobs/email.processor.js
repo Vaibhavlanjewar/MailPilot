@@ -54,7 +54,7 @@ export async function processEmailJob(job) {
 
   const owner = await User.findById(campaign.userId)
     .select(
-      "+smtpAppPasswordEnc +gmailRefreshTokenEnc email name smtpUser smtpFromDisplayName",
+      "+gmailRefreshTokenEnc email name smtpUser smtpFromDisplayName",
     )
     .lean();
   if (!owner) {

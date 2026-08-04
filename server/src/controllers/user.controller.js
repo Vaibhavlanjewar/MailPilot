@@ -4,7 +4,7 @@ import { google } from "googleapis";
 import { User } from "../models/User.js";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
-import { encryptSecret, hashPin, verifyPin as verifyPinHash } from "../utils/secretCrypto.js";
+import { encryptSecret } from "../utils/secretCrypto.js";
 
 const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.send",
@@ -40,9 +40,7 @@ function settingsPayload(user) {
     role: user.role || "candidate",
     smtpUser: user.smtpUser || "",
     smtpFromDisplayName: user.smtpFromDisplayName || "",
-    hasSmtpAppPassword: Boolean(user.smtpAppPasswordEnc),
     hasGmailRefreshToken: Boolean(user.gmailRefreshTokenEnc),
-    hasSecurityPin: Boolean(user.securityPinHash),
   };
 }
 
@@ -58,7 +56,7 @@ export async function getSettings(req, res, next) {
   try {
     const user = await User.findById(req.userId)
       .select(
-        "email name role smtpUser smtpFromDisplayName smtpAppPasswordEnc gmailRefreshTokenEnc securityPinHash",
+        "email name role smtpUser smtpFromDisplayName gmailRefreshTokenEnc",
       )
       .lean();
 
@@ -99,7 +97,6 @@ export async function updateProfile(req, res, next) {
  * Body (all optional except at least one update):
  * - smtpUser: string — SMTP login email; "" clears (use account email)
  * - smtpFromDisplayName: string — From display name (e.g. MailChips)
- * - smtpAppPassword: string — "" removes; omit to leave unchanged
  * - gmailRefreshToken: string — "" removes; omit to leave unchanged
  */
 export async function updateSettings(req, res, next) {
@@ -109,49 +106,27 @@ export async function updateSettings(req, res, next) {
       !process.env.SMTP_CREDENTIALS_ENCRYPTION_KEY
     ) {
       throw new AppError(
-        "Server is not configured to store app passwords (set SMTP_CREDENTIALS_ENCRYPTION_KEY)",
+        "Server is not configured to store Gmail credentials (set SMTP_CREDENTIALS_ENCRYPTION_KEY)",
         503,
       );
     }
 
-    const {
-      smtpUser,
-      smtpFromDisplayName,
-      smtpAppPassword,
-      gmailRefreshToken,
-      role,
-      securityPin,
-    } = req.body;
+    const { smtpUser, smtpFromDisplayName, gmailRefreshToken, role } = req.body;
 
     if (
       smtpUser === undefined &&
       smtpFromDisplayName === undefined &&
-      smtpAppPassword === undefined &&
       gmailRefreshToken === undefined &&
-      role === undefined &&
-      securityPin === undefined
+      role === undefined
     ) {
       throw new AppError(
-        "Send at least one of: smtpUser, smtpFromDisplayName, smtpAppPassword, gmailRefreshToken, role, securityPin",
+        "Send at least one of: smtpUser, smtpFromDisplayName, gmailRefreshToken, role",
         422,
       );
     }
 
     const $set = {};
     const $unset = {};
-
-    if (securityPin !== undefined) {
-      if (typeof securityPin !== "string") {
-        throw new AppError("securityPin must be a string", 422);
-      }
-      if (securityPin === "") {
-        $unset.securityPinHash = 1;
-      } else if (!/^\d{4}$/.test(securityPin)) {
-        throw new AppError("securityPin must be exactly 4 digits", 422);
-      } else {
-        $set.securityPinHash = hashPin(securityPin);
-      }
-    }
 
     if (role !== undefined) {
       if (!["candidate", "recruiter"].includes(role)) {
@@ -181,23 +156,6 @@ export async function updateSettings(req, res, next) {
       $set.smtpFromDisplayName = smtpFromDisplayName.trim();
     }
 
-    if (smtpAppPassword !== undefined) {
-      if (typeof smtpAppPassword !== "string") {
-        throw new AppError("smtpAppPassword must be a string", 422);
-      }
-      const trimmed = smtpAppPassword.replace(/\s/g, "");
-      if (trimmed === "") {
-        $unset.smtpAppPasswordEnc = 1;
-      } else if (trimmed.length < 16) {
-        throw new AppError(
-          "Gmail app password must be at least 16 characters (spaces ignored)",
-          422,
-        );
-      } else {
-        $set.smtpAppPasswordEnc = encryptSecret(trimmed);
-      }
-    }
-
     if (gmailRefreshToken !== undefined) {
       if (typeof gmailRefreshToken !== "string") {
         throw new AppError("gmailRefreshToken must be a string", 422);
@@ -223,7 +181,7 @@ export async function updateSettings(req, res, next) {
     const user = await User.findByIdAndUpdate(req.userId, update, {
       new: true,
     }).select(
-      "email name role smtpUser smtpFromDisplayName smtpAppPasswordEnc gmailRefreshTokenEnc securityPinHash",
+      "email name role smtpUser smtpFromDisplayName gmailRefreshTokenEnc",
     );
 
     if (!user) {
@@ -231,33 +189,6 @@ export async function updateSettings(req, res, next) {
     }
 
     res.json(settingsPayload(user));
-  } catch (err) {
-    next(err);
-  }
-}
-
-/**
- * Verifies the security PIN gating Email Sending Setup. Rate-limited at the
- * route level — a 4-digit PIN is only 10,000 combinations and would be
- * trivially brute-forceable without it.
- */
-export async function verifyPin(req, res, next) {
-  try {
-    const { pin } = req.body;
-    if (typeof pin !== "string" || !/^\d{4}$/.test(pin)) {
-      throw new AppError("pin must be exactly 4 digits", 422);
-    }
-
-    const user = await User.findById(req.userId).select("securityPinHash");
-    if (!user) throw new AppError("User not found", 404);
-
-    if (!user.securityPinHash) {
-      // No PIN set yet — nothing to gate, so verification trivially passes.
-      return res.json({ valid: true, pinSet: false });
-    }
-
-    const valid = verifyPinHash(pin, user.securityPinHash);
-    res.json({ valid, pinSet: true });
   } catch (err) {
     next(err);
   }
