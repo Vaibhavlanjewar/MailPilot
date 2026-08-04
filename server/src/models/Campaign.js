@@ -19,6 +19,8 @@ const campaignSchema = new mongoose.Schema(
       index: true,
     },
     scheduledAt: { type: Date, default: null },
+    /** Whether to attach the sender's saved resume to every send in this campaign. */
+    attachResume: { type: Boolean, default: true },
     recipientContactIds: [
       { type: mongoose.Schema.Types.ObjectId, ref: 'Contact' },
     ],

@@ -41,8 +41,15 @@ export async function getCampaignLimits(req, res, next) {
 
 export async function createCampaign(req, res, next) {
   try {
-    const { name, subject, content, textContent = '', contactIds = [], scheduledAt } =
-      req.body;
+    const {
+      name,
+      subject,
+      content,
+      textContent = '',
+      contactIds = [],
+      scheduledAt,
+      attachResume = true,
+    } = req.body;
 
     let recipientContactIds = [];
     if (Array.isArray(contactIds) && contactIds.length) {
@@ -86,6 +93,7 @@ export async function createCampaign(req, res, next) {
       recipientContactIds,
       scheduledAt: scheduledDate,
       status: 'pending',
+      attachResume: Boolean(attachResume),
     });
 
     logger.info('Campaign created', { campaignId: campaign._id });

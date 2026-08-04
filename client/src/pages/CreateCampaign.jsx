@@ -24,6 +24,7 @@ const initialForm = {
   selectedTemplateId: '',
   sendMode: 'now',
   scheduleAt: '',
+  attachResume: true,
 };
 
 const emptyManualClient = () => ({
@@ -72,6 +73,7 @@ export default function CreateCampaign() {
   const [contacts, setContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contactsError, setContactsError] = useState('');
+  const [hasResume, setHasResume] = useState(false);
   const [contactFilter, setContactFilter] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState([]);
 
@@ -135,6 +137,10 @@ export default function CreateCampaign() {
     loadTemplates();
     loadContacts();
     loadCampaignLimits();
+    api
+      .get('/resumes/me')
+      .then(({ data }) => setHasResume(Boolean(data.resume)))
+      .catch(() => setHasResume(false));
   }, [loadTemplates, loadContacts, loadCampaignLimits]);
 
   function update(field, value) {
@@ -402,6 +408,7 @@ export default function CreateCampaign() {
         subject: form.subject.trim() || form.name.trim(),
         content: form.body,
         contactIds,
+        attachResume: hasResume ? form.attachResume : false,
         ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
       });
 
@@ -856,6 +863,31 @@ export default function CreateCampaign() {
                     required={form.sendMode === 'schedule'}
                   />
                 </div>
+              )}
+
+              {hasResume ? (
+                <label className="flex items-start gap-3 rounded-xl border border-surface-border bg-app-surface p-4">
+                  <input
+                    type="checkbox"
+                    checked={form.attachResume}
+                    onChange={(e) => update('attachResume', e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-input-border"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-app">Attach my resume</span>
+                    <span className="block text-xs text-app-muted">
+                      Sends the resume on file with every email in this campaign.
+                    </span>
+                  </span>
+                </label>
+              ) : (
+                <p className="rounded-xl border border-dashed border-surface-border p-4 text-xs text-app-muted">
+                  No resume on file, so nothing will be attached.{' '}
+                  <Link to="/app/resume" className="font-medium text-primary hover:underline">
+                    Add one
+                  </Link>{' '}
+                  to enable this.
+                </p>
               )}
             </div>
           )}

@@ -84,14 +84,18 @@ export async function processEmailJob(job) {
   const trackingUrl = `${trackingBase}/track?token=${encodeURIComponent(trackingToken)}`;
   const trackedHtml = appendTrackingPixel(html, trackingUrl);
 
-  // Best-effort: a missing/unavailable resume should never block the send.
-  const resumeFile = await getUserResumeAttachment(campaign.userId).catch((err) => {
-    logger.warn("Could not attach resume to outreach email", {
-      userId: String(campaign.userId),
-      error: err.message,
-    });
-    return null;
-  });
+  // Opt-in per campaign (campaign.attachResume, checked at creation time) —
+  // and even then, best-effort: a missing/unavailable resume should never
+  // block the send.
+  const resumeFile = campaign.attachResume
+    ? await getUserResumeAttachment(campaign.userId).catch((err) => {
+        logger.warn("Could not attach resume to outreach email", {
+          userId: String(campaign.userId),
+          error: err.message,
+        });
+        return null;
+      })
+    : null;
   const attachments = resumeFile
     ? [{ filename: resumeFile.filename, content: resumeFile.content, contentType: resumeFile.contentType }]
     : undefined;
