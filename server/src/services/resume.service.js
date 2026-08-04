@@ -1,11 +1,7 @@
 import { Resume } from '../models/Resume.js';
+import { ResumeFile } from '../models/ResumeFile.js';
 import { chunkText } from './ai/rag.service.js';
 import { embedTexts } from './ai/embedding.service.js';
-import {
-  uploadResumeFile,
-  deleteResumeFile,
-  downloadResumeFile,
-} from './firebase/firebase.service.js';
 import { logger } from '../utils/logger.js';
 
 export const MAX_RESUME_BYTES = 2 * 1024 * 1024;
@@ -49,27 +45,27 @@ async function buildEmbedding(content) {
 export async function saveUserResume(userId, data, binary = null) {
   const embedding = await buildEmbedding(data.content);
 
-  const previous = await Resume.findOne({ userId }).select('file');
-  let file = { storagePath: '', fileUrl: '', mimeType: '' };
+  let file = { stored: false, mimeType: '' };
 
   if (binary?.buffer?.length) {
-    const stored = await uploadResumeFile(userId, binary.buffer, {
-      fileName: binary.fileName,
-      mimeType: binary.mimeType,
-    });
-    if (stored) {
-      file = { ...stored, mimeType: binary.mimeType || '' };
-    } else {
-      logger.warn('Resume text saved but the file could not be stored', {
-        userId: String(userId),
-      });
-    }
-  }
-
-  // Replacing pdf -> docx changes the path, so clear the old object explicitly.
-  const oldPath = previous?.file?.storagePath;
-  if (oldPath && oldPath !== file.storagePath) {
-    await deleteResumeFile(oldPath);
+    await ResumeFile.findOneAndUpdate(
+      { userId },
+      {
+        $set: {
+          userId,
+          fileName: binary.fileName || '',
+          mimeType: binary.mimeType || 'application/pdf',
+          size: binary.buffer.length,
+          data: binary.buffer,
+        },
+      },
+      { upsert: true },
+    );
+    file = { stored: true, mimeType: binary.mimeType || 'application/pdf' };
+  } else {
+    // A text-only save replaces the resume wholesale, so a previously attached
+    // binary no longer matches the stored content.
+    await ResumeFile.deleteOne({ userId });
   }
 
   const resume = await Resume.findOneAndUpdate(
@@ -82,7 +78,7 @@ export async function saveUserResume(userId, data, binary = null) {
     userId: String(userId),
     chunks: embedding.chunks.length,
     embeddingProvider: embedding.provider || 'none (lexical fallback)',
-    fileStored: Boolean(file.storagePath),
+    fileStored: file.stored,
   });
 
   return resume;
@@ -90,12 +86,10 @@ export async function saveUserResume(userId, data, binary = null) {
 
 /** Removes the resume, its embedding vectors, and the stored file together. */
 export async function deleteUserResume(userId) {
-  const resume = await Resume.findOne({ userId }).select('file');
+  const resume = await Resume.findOne({ userId }).select('_id');
   if (!resume) return false;
 
-  if (resume.file?.storagePath) {
-    await deleteResumeFile(resume.file.storagePath);
-  }
+  await ResumeFile.deleteOne({ userId });
   await Resume.deleteOne({ userId });
 
   logger.info('Resume, embeddings and stored file deleted', { userId: String(userId) });
@@ -104,15 +98,13 @@ export async function deleteUserResume(userId) {
 
 /** Fetches the original file for attaching to outreach emails. */
 export async function getUserResumeAttachment(userId) {
-  const resume = await Resume.findOne({ userId }).select('file fileName');
-  if (!resume?.file?.storagePath) return null;
-
-  const buffer = await downloadResumeFile(resume.file.storagePath);
-  if (!buffer) return null;
+  // Not .lean(): that yields a BSON Binary, while nodemailer needs a real Buffer.
+  const stored = await ResumeFile.findOne({ userId });
+  if (!stored?.data?.length) return null;
 
   return {
-    filename: resume.fileName || 'resume.pdf',
-    content: buffer,
-    contentType: resume.file.mimeType || 'application/pdf',
+    filename: stored.fileName || 'resume.pdf',
+    content: stored.data,
+    contentType: stored.mimeType || 'application/pdf',
   };
 }

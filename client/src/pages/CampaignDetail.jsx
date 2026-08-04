@@ -33,8 +33,8 @@ export default function CampaignDetail() {
   const [summary, setSummary] = useState({ total: 0, sent: 0, failed: 0, queued: 0 });
   const [recipients, setRecipients] = useState([]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const { data } = await api.get(`/campaign/status/${id}`);
@@ -44,13 +44,21 @@ export default function CampaignDetail() {
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const sending = summary.queued > 0;
+
+  useEffect(() => {
+    if (!sending) return undefined;
+    const timer = setInterval(() => load({ silent: true }), 3000);
+    return () => clearInterval(timer);
+  }, [sending, load]);
 
   if (loading) return <PageLoader />;
 
@@ -123,9 +131,13 @@ export default function CampaignDetail() {
       <Card>
         <CardHeader
           title="Recipient delivery list"
-          description="See who received the campaign and who failed or is still queued."
+          description={
+            sending
+              ? `Sending… ${summary.sent + summary.failed} of ${summary.total} processed. This list updates automatically.`
+              : 'See who received the campaign and who failed or is still queued.'
+          }
           action={
-            <Button type="button" variant="secondary" size="sm" onClick={load}>
+            <Button type="button" variant="secondary" size="sm" onClick={() => load()}>
               Refresh
             </Button>
           }

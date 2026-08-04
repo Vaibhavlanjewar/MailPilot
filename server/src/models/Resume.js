@@ -39,14 +39,9 @@ const resumeSchema = new mongoose.Schema(
     templates: { type: String, default: '' },
     fileName: { type: String, default: '' },
     fileSize: { type: Number, default: 0 },
-    /**
-     * The binary lives in Firebase Storage, not Mongo — base64 PDFs would bloat
-     * every document read. Only the pointer is kept here so campaign sends can
-     * fetch and attach the original file.
-     */
+    /** The binary itself lives in the ResumeFile collection, keyed by userId. */
     file: {
-      storagePath: { type: String, default: '' },
-      fileUrl: { type: String, default: '' },
+      stored: { type: Boolean, default: false },
       mimeType: { type: String, default: '' },
     },
     embedding: {
@@ -72,7 +67,7 @@ resumeSchema.methods.toSummary = function toSummary() {
     templates: this.templates,
     fileName: this.fileName,
     fileSize: this.fileSize,
-    hasFile: Boolean(this.file?.storagePath),
+    hasFile: Boolean(this.file?.stored),
     wordCount: this.content.split(/\s+/).filter(Boolean).length,
     embedding: {
       provider: this.embedding?.provider || '',

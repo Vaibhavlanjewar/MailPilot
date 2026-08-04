@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getStorage } from 'firebase-admin/storage';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 
@@ -105,75 +104,3 @@ export function verifyFirebaseToken(idToken) {
   return getAuth(adminApp).verifyIdToken(idToken);
 }
 
-function getBucket() {
-  const adminApp = getFirebaseAdmin();
-  if (!adminApp || !env.firebase.storageBucket) return null;
-  try {
-    return getStorage(adminApp).bucket(env.firebase.storageBucket);
-  } catch (err) {
-    logger.error('Firebase Storage unavailable', { error: err.message });
-    return null;
-  }
-}
-
-export function isStorageConfigured() {
-  return Boolean(env.firebase.storageBucket && getFirebaseAdmin());
-}
-
-/**
- * Stores a resume binary at a deterministic path so re-uploading overwrites the
- * previous file instead of accumulating orphans.
- *
- * @returns {Promise<{storagePath: string, fileUrl: string} | null>}
- */
-export async function uploadResumeFile(userId, buffer, { fileName, mimeType }) {
-  const bucket = getBucket();
-  if (!bucket) return null;
-
-  const extension = (fileName?.split('.').pop() || 'pdf').toLowerCase();
-  const storagePath = `resumes/${userId}/resume.${extension}`;
-
-  try {
-    const file = bucket.file(storagePath);
-    await file.save(buffer, {
-      contentType: mimeType || 'application/pdf',
-      resumable: false,
-      metadata: { metadata: { originalName: fileName || '' } },
-    });
-    return { storagePath, fileUrl: `gs://${bucket.name}/${storagePath}` };
-  } catch (err) {
-    logger.error('Resume upload to Firebase Storage failed', { error: err.message });
-    return null;
-  }
-}
-
-export async function downloadResumeFile(storagePath) {
-  const bucket = getBucket();
-  if (!bucket || !storagePath) return null;
-  try {
-    const [buffer] = await bucket.file(storagePath).download();
-    return buffer;
-  } catch (err) {
-    logger.error('Resume download from Firebase Storage failed', {
-      storagePath,
-      error: err.message,
-    });
-    return null;
-  }
-}
-
-/** Best-effort delete; a missing object is treated as already gone. */
-export async function deleteResumeFile(storagePath) {
-  const bucket = getBucket();
-  if (!bucket || !storagePath) return false;
-  try {
-    await bucket.file(storagePath).delete({ ignoreNotFound: true });
-    return true;
-  } catch (err) {
-    logger.error('Resume delete from Firebase Storage failed', {
-      storagePath,
-      error: err.message,
-    });
-    return false;
-  }
-}

@@ -417,7 +417,7 @@ export default function CreateCampaign() {
         ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
       });
 
-      navigate('/app/campaigns');
+      navigate(`/app/campaigns/${campaignId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {

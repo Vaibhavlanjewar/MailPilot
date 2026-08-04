@@ -160,9 +160,6 @@ export const env = {
     privateKey: normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY),
     /** Path to a service-account JSON, relative to server/. Takes precedence over the vars above. */
     serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
-    /** Storage bucket for resume binaries; falls back to the client-side value. */
-    storageBucket:
-      process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
   }
 };
 
