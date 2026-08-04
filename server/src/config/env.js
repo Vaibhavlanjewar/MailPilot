@@ -136,6 +136,20 @@ export const env = {
       Number(process.env.EMAIL_RATE_LIMIT_DURATION_MS) || 1000,
     ),
   },
+  /**
+   * TURN relays media when a direct peer-to-peer path can't be negotiated
+   * (symmetric NAT, corporate/campus firewalls). Credentials stay server-side
+   * and are handed to the client per-session, never bundled into the frontend.
+   * Unset simply means STUN-only: most calls still work, strict networks don't.
+   */
+  turn: {
+    urls: (process.env.TURN_URLS || '')
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean),
+    username: process.env.TURN_USERNAME || '',
+    credential: process.env.TURN_CREDENTIAL || '',
+  },
   apiRateLimitMax: Number(process.env.API_RATE_LIMIT_MAX) || 200,
   ai: {
     openaiApiKey: process.env.OPENAI_API_KEY || '',

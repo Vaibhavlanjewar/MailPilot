@@ -4,8 +4,12 @@ import { toast } from 'react-toastify';
 import { auth } from '../services/firebase';
 import api from '../services/api';
 
-/** Free public STUN — enough for most home/mobile NATs, not strict corporate firewalls (no TURN). */
-const ICE_SERVERS = [
+/**
+ * Used only if the server's /ice-servers call fails. TURN credentials are
+ * fetched per-session instead of hardcoded here, so they aren't published in
+ * the client bundle to anyone who views source.
+ */
+const FALLBACK_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
@@ -47,6 +51,7 @@ export default function MockInterviewRoom() {
   const isInitiatorRef = useRef(false);
   const connectTimeoutRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
+  const iceServersRef = useRef(FALLBACK_ICE_SERVERS);
   // StrictMode double-invokes the mount effect in dev, and getUserMedia/WS
   // setup isn't naturally cancellable — without this guard both invocations
   // race to open their own camera stream + signaling connection as the same
@@ -64,7 +69,7 @@ export default function MockInterviewRoom() {
   }, []);
 
   const createPeerConnection = useCallback(() => {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
 
     pc.onicecandidate = (e) => {
       if (e.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
@@ -130,6 +135,17 @@ export default function MockInterviewRoom() {
         setErrorMessage('This room already has two participants.');
         return;
       }
+
+      // Must resolve before the first RTCPeerConnection is built — ICE servers
+      // can't be added after construction. A failure here is non-fatal: STUN
+      // alone still connects most calls, just not behind strict firewalls.
+      try {
+        const { data } = await api.get('/mock-interview/ice-servers');
+        if (data.iceServers?.length) iceServersRef.current = data.iceServers;
+      } catch {
+        iceServersRef.current = FALLBACK_ICE_SERVERS;
+      }
+      if (sessionIdRef.current !== mySession) return;
 
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       if (sessionIdRef.current !== mySession) {

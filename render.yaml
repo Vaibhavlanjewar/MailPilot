@@ -92,6 +92,13 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      # ---- WebRTC TURN (relays media when a direct P2P path is blocked) ----
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false
       - key: RUN_EMAIL_WORKER
         value: "true"
       - key: EMAIL_WORKER_CONCURRENCY

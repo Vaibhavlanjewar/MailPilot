@@ -1,10 +1,17 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticate } from '../middlewares/auth.js';
+import { env } from '../config/env.js';
 import { MockInterviewRoom } from '../models/MockInterviewRoom.js';
 import { AppError } from '../utils/AppError.js';
 
 const router = Router();
+
+/** Public STUN — enough to discover a direct path on most home/mobile NATs. */
+const STUN_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
 
 const createLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -16,6 +23,25 @@ const createLimiter = rateLimit({
 });
 
 router.use(authenticate);
+
+/**
+ * ICE servers for the browser's RTCPeerConnection. Served per-session rather
+ * than baked into the client bundle so the TURN credential isn't published to
+ * anyone who views source. Degrades to STUN-only when TURN isn't configured.
+ */
+router.get('/ice-servers', (req, res) => {
+  const { urls, username, credential } = env.turn;
+  const turn =
+    urls.length && username && credential
+      ? [{ urls, username, credential }]
+      : [];
+
+  res.json({
+    success: true,
+    iceServers: [...STUN_SERVERS, ...turn],
+    hasTurn: turn.length > 0,
+  });
+});
 
 router.post('/rooms', createLimiter, async (req, res, next) => {
   try {
