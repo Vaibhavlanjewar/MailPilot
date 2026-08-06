@@ -1,10 +1,11 @@
 /**
  * Feature flags for work that ships behind a "Coming soon" state.
  *
- * The Live Practice Room (1:1 WebRTC mock interviews) is code-complete and its
- * signaling protocol is verified end-to-end, but the actual peer-to-peer media
- * path hasn't been confirmed on real hardware yet, and there's no TURN server —
- * so calls can still fail on strict corporate/campus networks. Flip this to
- * true (single line, no other changes) once a real two-browser call is verified.
+ * The Live Practice Room (1:1 WebRTC mock interviews, scheduling, TURN relay)
+ * is code-complete and everything short of real camera hardware has been
+ * verified directly: signaling protocol, TURN server reachability, ICE
+ * credential handoff, join-window enforcement, .ics invites, and the reminder
+ * queue. What hasn't been proven yet is an actual two-browser video/audio
+ * connection. Flip back to false if that test fails.
  */
-export const LIVE_PRACTICE_ROOM_ENABLED = false;
+export const LIVE_PRACTICE_ROOM_ENABLED = true;
