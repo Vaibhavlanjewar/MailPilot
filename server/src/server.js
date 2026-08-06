@@ -12,6 +12,7 @@ import { closeMeetingReminderQueue } from './queues/meetingReminder.queue.js';
 import { closeRedisConnections, verifyRedisConnection } from './queues/connection.js';
 import { getFirebaseAdmin } from './services/firebase/firebase.service.js';
 import { attachSignalingServer } from './services/mockInterview/signaling.js';
+import { attachGameServer } from './services/games/gameSocket.js';
 import { logger } from './utils/logger.js';
 
 assertEnv();
@@ -44,6 +45,7 @@ if (env.runEmailWorker) {
 
 const server = http.createServer(app);
 attachSignalingServer(server);
+attachGameServer(server);
 
 server.listen(env.port, () => {
   logger.info(`HTTP server listening on port ${env.port}`);
