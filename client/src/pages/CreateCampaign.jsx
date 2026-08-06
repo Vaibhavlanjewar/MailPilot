@@ -43,6 +43,32 @@ function normalizeEmail(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
+/**
+ * Mirrors renderRecipientTemplate() on the server so the preview shows the same
+ * text that actually gets sent. Keep the token list in sync with
+ * server/src/utils/templateRenderer.js.
+ */
+function fillPlaceholders(template, recipient) {
+  const input = typeof template === 'string' ? template.trim() : '';
+  if (!input) return '';
+
+  const email = normalizeEmail(recipient?.email);
+  const fallback = email ? email.split('@')[0] : '';
+  const displayName = (recipient?.name || '').trim() || fallback;
+  const parts = displayName.split(/\s+/).filter(Boolean);
+
+  const lookup = {
+    name: displayName,
+    full_name: displayName,
+    first_name: parts[0] || fallback,
+    last_name: parts.length > 1 ? parts.slice(1).join(' ') : '',
+    email,
+    company: (recipient?.company || '').trim() || 'your organization',
+  };
+
+  return input.replace(/{{\s*([a-z_]+)\s*}}/gi, (_m, token) => lookup[String(token).toLowerCase()] ?? '');
+}
+
 function dedupeContacts(list) {
   const seen = new Set();
   const out = [];
@@ -74,6 +100,7 @@ export default function CreateCampaign() {
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contactsError, setContactsError] = useState('');
   const [hasResume, setHasResume] = useState(false);
+  const [sender, setSender] = useState(null);
   const [contactFilter, setContactFilter] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState([]);
 
@@ -141,6 +168,22 @@ export default function CreateCampaign() {
       .get('/resumes/me')
       .then(({ data }) => setHasResume(Boolean(data.resume)))
       .catch(() => setHasResume(false));
+    // Mirrors resolveCampaignFrom() on the server so the preview shows the
+    // address recipients will actually see, not a guess.
+    api
+      .get('/users/me/settings')
+      .then(({ data }) => {
+        const address = (data.smtpUser || '').trim() || (data.email || '').trim();
+        setSender({
+          address,
+          displayName:
+            (data.smtpFromDisplayName || '').trim() ||
+            (data.name || '').trim() ||
+            address.split('@')[0],
+          hasGmail: Boolean(data.hasGmailRefreshToken),
+        });
+      })
+      .catch(() => setSender(null));
   }, [loadTemplates, loadContacts, loadCampaignLimits]);
 
   function update(field, value) {
@@ -249,6 +292,13 @@ export default function CreateCampaign() {
   }, [activeContacts, selectedContactIds]);
 
   const previewRecipients = audienceMode === 'contacts' ? selectedContacts : manualContacts;
+
+  // Preview against the first real recipient, so placeholders show resolved
+  // values rather than raw {{tokens}}.
+  const renderPreviewText = useCallback(
+    (template) => fillPlaceholders(template, previewRecipients[0]),
+    [previewRecipients],
+  );
 
   const contactBatchOptions = useMemo(() => {
     const options = [];
@@ -405,7 +455,7 @@ export default function CreateCampaign() {
 
       const { data: createData } = await api.post('/campaign/create', {
         name: form.name.trim(),
-        subject: form.subject.trim() || form.name.trim(),
+        subject: form.subject.trim(),
         content: form.body,
         contactIds,
         attachResume: hasResume ? form.attachResume : false,
@@ -431,7 +481,7 @@ export default function CreateCampaign() {
 
   const canNext =
     step === 1
-      ? form.name.trim()
+      ? form.name.trim() && form.subject.trim()
       : step === 2
         ? hasAudienceInput && !audienceLimitError
         : step === 3
@@ -507,7 +557,7 @@ export default function CreateCampaign() {
             title={`Step ${step} - ${steps[step - 1].title}`}
             description={
               step === 1
-                ? 'Name your campaign and set the subject line recipients will see.'
+                ? 'Give the campaign a private name, then write the subject line recipients will actually see.'
                 : step === 2
                   ? 'Choose audience source: saved contacts or add new clients.'
                   : step === 3
@@ -533,10 +583,53 @@ export default function CreateCampaign() {
           )}
 
           {step === 1 && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              <div className="rounded-xl border border-surface-border bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/40">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sending as</p>
+                {sender ? (
+                  <>
+                    <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
+                      {sender.displayName} &lt;{sender.address}&gt;
+                    </p>
+                    {!sender.hasGmail && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                        Gmail isn't connected yet — connect it in{' '}
+                        <Link to="/app/settings" className="font-medium underline">Settings</Link> or this campaign can't be delivered.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-1 text-slate-500">Loading your sender details…</p>
+                )}
+              </div>
+
               <div>
                 <Label htmlFor="name">Campaign name</Label>
-                <Input id="name" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="March newsletter" required />
+                <Input
+                  id="name"
+                  value={form.name}
+                  onChange={(e) => update('name', e.target.value)}
+                  placeholder="Python developer outreach — batch 1"
+                  required
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Only for your own reference in the campaigns list. Recipients never see this.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="subject">Subject line</Label>
+                <Input
+                  id="subject"
+                  value={form.subject}
+                  onChange={(e) => update('subject', e.target.value)}
+                  placeholder="Python developer with 2 years' experience — open to a quick chat?"
+                  required
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  This is the line recipients actually see in their inbox. Placeholders work here too —
+                  e.g. <span className="font-medium">{'Hi {{first_name}}, quick question about {{company}}'}</span>.
+                </p>
               </div>
             </div>
           )}
@@ -797,20 +890,45 @@ export default function CreateCampaign() {
           {step === 4 && (
             <div className="space-y-5">
               <Card>
-                <CardHeader title="Email header" description="Final subject and audience before queueing." />
-                <div className="space-y-2 text-sm">
-                  <p><span className="font-semibold text-slate-900 dark:text-slate-100">Campaign:</span> {form.name || '-'}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-slate-100">Subject:</span> {form.subject || form.name || '-'}</p>
-                  <p>
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">Audience mode:</span>{' '}
-                    {audienceMode === 'contacts' ? 'Client from contacts' : 'Add new client'}
-                  </p>
+                <CardHeader
+                  title="How this lands in their inbox"
+                  description="Exactly what the first recipient will see. Placeholders are filled in per person at send time."
+                />
+                <div className="overflow-hidden rounded-xl border border-surface-border dark:border-slate-700">
+                  <div className="space-y-1.5 border-b border-surface-border bg-slate-50 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950/40">
+                    <p className="flex gap-2">
+                      <span className="w-16 shrink-0 text-slate-500">From</span>
+                      <span className="font-medium text-slate-900 dark:text-slate-100">
+                        {sender ? `${sender.displayName} <${sender.address}>` : '—'}
+                      </span>
+                    </p>
+                    <p className="flex gap-2">
+                      <span className="w-16 shrink-0 text-slate-500">To</span>
+                      <span className="text-slate-900 dark:text-slate-100">
+                        {previewRecipients[0]
+                          ? `${previewRecipients[0].name || previewRecipients[0].email}${previewRecipients.length > 1 ? ` and ${previewRecipients.length - 1} other${previewRecipients.length > 2 ? 's' : ''}` : ''}`
+                          : 'No recipients selected'}
+                      </span>
+                    </p>
+                    <p className="flex gap-2">
+                      <span className="w-16 shrink-0 text-slate-500">Subject</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">
+                        {renderPreviewText(form.subject) || <span className="font-normal text-rose-600">No subject set</span>}
+                      </span>
+                    </p>
+                    {hasResume && form.attachResume && (
+                      <p className="flex gap-2">
+                        <span className="w-16 shrink-0 text-slate-500">Attached</span>
+                        <span className="text-slate-900 dark:text-slate-100">Your resume</span>
+                      </p>
+                    )}
+                  </div>
+                  <HtmlPreview
+                    html={renderPreviewText(form.body)}
+                    minHeight="260px"
+                    emptyMessage="No email content yet."
+                  />
                 </div>
-              </Card>
-
-              <Card>
-                <CardHeader title="Email content" description="Placeholders are resolved per recipient at send time." />
-                <HtmlPreview html={form.body} minHeight="260px" emptyMessage="No email content yet." />
               </Card>
 
               <Card>
