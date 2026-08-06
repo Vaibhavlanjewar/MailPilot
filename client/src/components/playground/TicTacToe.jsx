@@ -21,18 +21,27 @@ function newRoomCode() {
 
 function Board({ board, winningLine, onPlay, disabled }) {
   return (
-    <div className="inline-grid grid-cols-3 gap-1.5">
+    // The gap shows the darker wrapper through it, which is what draws the
+    // grid lines — no borders needed, and it stays correct in both themes.
+    <div className="inline-grid grid-cols-3 gap-1.5 rounded-2xl bg-app-muted p-1.5 shadow-inner">
       {board.map((cell, i) => {
         const isWinning = winningLine?.includes(i);
+        const playable = !cell && !disabled;
         return (
           <button
             key={i}
             type="button"
             onClick={() => onPlay(i)}
             disabled={disabled || Boolean(cell)}
-            className={`flex h-20 w-20 items-center justify-center rounded-xl text-3xl font-bold transition sm:h-24 sm:w-24 ${
-              isWinning ? 'bg-emerald-500/70 text-white' : 'bg-default-bg text-app'
-            } ${!cell && !disabled ? 'hover:bg-primary/10' : ''} disabled:cursor-not-allowed`}
+            className={[
+              'flex h-20 w-20 items-center justify-center rounded-xl text-4xl font-bold transition sm:h-24 sm:w-24',
+              isWinning
+                ? 'bg-emerald-500 text-white shadow-md'
+                : 'bg-app-surface shadow-sm',
+              cell === 'X' && !isWinning ? 'text-indigo-500 dark:text-indigo-400' : '',
+              cell === 'O' && !isWinning ? 'text-amber-500 dark:text-amber-400' : '',
+              playable ? 'cursor-pointer hover:bg-primary/10' : 'cursor-not-allowed',
+            ].filter(Boolean).join(' ')}
             aria-label={`Square ${i + 1}${cell ? `, ${cell}` : ', empty'}`}
           >
             {cell}

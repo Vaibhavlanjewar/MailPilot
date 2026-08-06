@@ -195,6 +195,26 @@
     background-color: var(--surface);
   }
 
+  /*
+   * Both were referenced across ~15 pages but never defined anywhere — not in
+   * this file and not derivable from the Tailwind config — so every
+   * `bg-default-bg` panel and `border-input-border` field rendered with no
+   * background or border at all. Worst on dark backgrounds, where an unstyled
+   * tile is indistinguishable from the card behind it (the Tic Tac Toe grid
+   * was invisible for exactly this reason).
+   *
+   * `border-surface-border` is deliberately not redefined here: it already
+   * resolves through the Tailwind config, so overriding it would restyle
+   * borders app-wide rather than fix a bug.
+   */
+  .bg-default-bg {
+    background-color: var(--bg);
+  }
+
+  .border-input-border {
+    border-color: var(--surface-border);
+  }
+
   .border-app {
     border-color: var(--surface-border);
   }
