@@ -36,8 +36,9 @@ export default function MockInterviewRoom() {
   const { code } = useParams();
   const navigate = useNavigate();
 
-  const [status, setStatus] = useState('checking'); // checking | waiting | connecting | connected | ended | error
+  const [status, setStatus] = useState('checking'); // checking | scheduled | waiting | connecting | connected | ended | error
   const [errorMessage, setErrorMessage] = useState('');
+  const [pendingInfo, setPendingInfo] = useState(null); // { title, joinOpensAt } — set only while status === 'scheduled'
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [peerName, setPeerName] = useState('');
@@ -129,6 +130,15 @@ export default function MockInterviewRoom() {
     try {
       const room = await api.get(`/mock-interview/rooms/${code}`);
       if (sessionIdRef.current !== mySession) return; // superseded by a newer effect run
+
+      // Scheduled meetings only open the join window shortly before the start
+      // time (see server-side joinWindow()) — bail out before touching the
+      // camera/mic at all, rather than opening a live room nobody should be in yet.
+      if (!room.data.room.canJoinNow) {
+        setPendingInfo({ title: room.data.room.title, joinOpensAt: room.data.room.joinOpensAt });
+        setStatus('scheduled');
+        return;
+      }
 
       if (room.data.room.isFull && !room.data.room.isOwner) {
         setStatus('error');
@@ -284,6 +294,15 @@ export default function MockInterviewRoom() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
+  // While the join window hasn't opened yet, re-check periodically so the
+  // page moves itself into the call the moment it's allowed to, instead of
+  // requiring a manual reload at exactly the right second.
+  useEffect(() => {
+    if (status !== 'scheduled') return undefined;
+    const timer = setInterval(() => startCall(sessionIdRef.current), 30_000);
+    return () => clearInterval(timer);
+  }, [status, startCall]);
+
   function toggleMic() {
     const track = localStreamRef.current?.getAudioTracks()[0];
     if (track) {
@@ -325,6 +344,19 @@ export default function MockInterviewRoom() {
         </button>
       </div>
 
+      {status === 'scheduled' && pendingInfo && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-6 text-center text-sm text-app">
+          <p className="text-base font-semibold">{pendingInfo.title || 'This meeting'} hasn't opened yet</p>
+          <p className="mt-1 text-app-muted">
+            The room opens 10 minutes before the start time
+            {pendingInfo.joinOpensAt && (
+              <> — around {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(pendingInfo.joinOpensAt))}</>
+            )}
+            . This page will move you in automatically once it does.
+          </p>
+        </div>
+      )}
+
       {status === 'waiting' && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-app">
           Waiting for the other person to join. Share the invite link above with them.
@@ -337,6 +369,8 @@ export default function MockInterviewRoom() {
         </div>
       )}
 
+      {status !== 'scheduled' && (
+      <>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-black">
           <video ref={localVideoRef} autoPlay playsInline muted className="aspect-video w-full object-cover" />
@@ -389,6 +423,8 @@ export default function MockInterviewRoom() {
           Leave
         </button>
       </div>
+      </>
+      )}
     </div>
   );
 }

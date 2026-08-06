@@ -3,7 +3,12 @@ import app from './app.js';
 import { assertEnv, env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { startEmailWorker, stopEmailWorker } from './jobs/email.worker.js';
+import {
+  startMeetingReminderWorker,
+  stopMeetingReminderWorker,
+} from './jobs/meetingReminder.worker.js';
 import { closeEmailQueue } from './queues/email.queue.js';
+import { closeMeetingReminderQueue } from './queues/meetingReminder.queue.js';
 import { closeRedisConnections, verifyRedisConnection } from './queues/connection.js';
 import { getFirebaseAdmin } from './services/firebase/firebase.service.js';
 import { attachSignalingServer } from './services/mockInterview/signaling.js';
@@ -32,6 +37,7 @@ try {
 
 if (env.runEmailWorker) {
   startEmailWorker();
+  startMeetingReminderWorker();
 } else {
   logger.info('RUN_EMAIL_WORKER=false — start a worker via `npm run worker`');
 }
@@ -50,7 +56,9 @@ async function shutdown(signal) {
       server.close((err) => (err ? reject(err) : resolve()));
     });
     await stopEmailWorker();
+    await stopMeetingReminderWorker();
     await closeEmailQueue();
+    await closeMeetingReminderQueue();
     await closeRedisConnections();
     await disconnectDatabase();
     logger.info('Shutdown complete');
