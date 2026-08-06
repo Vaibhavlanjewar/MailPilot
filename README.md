@@ -1,595 +1,522 @@
-﻿# MailPilot
+# MailPilot
 
-MailPilot helps job seekers send personalized cold emails in bulk, automatically, within minutes.
+A career platform for job seekers: run personalised cold-email outreach at scale, and prepare for
+the interviews that outreach lands you — resume analysis, AI coaching, a live code sandbox, and 1:1
+video mock interviews.
 
-Live deployment: https://mail-pilot-mu-one.vercel.app/
+**Live:** https://mailpilot-zv26.onrender.com
 
-## 1. Product Aim
+---
 
-The aim of this product is simple:
+## Table of contents
 
-- Help job seekers reach many recruiters and hiring teams very fast.
-- Send customized cold emails in bulk without manual repetition.
-- Automate the complete workflow from contact import to delivery.
-- Track which recipients opened the email.
+1. [What it does](#1-what-it-does)
+2. [Architecture at a glance](#2-architecture-at-a-glance)
+3. [Why this shape](#3-why-this-shape)
+4. [Data stores — who owns what](#4-data-stores--who-owns-what)
+5. [MongoDB collections](#5-mongodb-collections)
+6. [Firebase — auth only](#6-firebase--auth-only)
+7. [The AI layer](#7-the-ai-layer)
+8. [External APIs](#8-external-apis)
+9. [Email delivery pipeline](#9-email-delivery-pipeline)
+10. [Live Practice Room (WebRTC)](#10-live-practice-room-webrtc)
+11. [API surface](#11-api-surface)
+12. [Security model](#12-security-model)
+13. [Tech stack](#13-tech-stack)
+14. [Running locally](#14-running-locally)
+15. [Environment variables](#15-environment-variables)
+16. [Deployment](#16-deployment)
+17. [Known limitations](#17-known-limitations)
 
-In short: within seconds, you can start outreach to 500+ people by email using one workflow.
+---
 
-## 2. Problem We Are Solving
+## 1. What it does
 
-Job seekers usually face these issues:
+**Outreach**
+- Import contacts manually or by CSV
+- Reusable templates with `{{name}}` / `{{company}}` placeholders
+- AI-assisted template writing, grounded in your actual resume
+- Queued bulk sending with deliberate pacing, retries, and per-recipient logs
+- Optional resume PDF attached per campaign
+- Open tracking via a signed tracking pixel
 
-- They copy-paste similar emails repeatedly.
-- They cannot easily personalize at scale.
-- Sending manually is slow and error-prone.
-- They do not know who opened their emails.
-- Managing contacts/templates/campaigns across tools is messy.
+**Career preparation**
+- One resume per account, chunked and embedded for semantic retrieval
+- Ask My Resume — RAG chat over your own resume
+- Career Fit — AI analysis of strengths, gaps, and target roles
+- Interview Prep — generated questions, coach chat, and a live code sandbox
+- Learning Roadmap — staged plan with real linked resources
+- Job Board — aggregated external listings plus recruiter-posted jobs
+- Live Practice Room — 1:1 WebRTC video mock interviews, schedulable with calendar invites
+- Community — discussion threads
 
-## 3. How MailPilot Solves It
+**Recruiter mode**
+- AI-assisted job posting flow, with posting management
 
-1. Import contacts in bulk (manual list, CSV, or API).
-2. Create reusable templates with placeholders like {{name}} and {{company}}.
-3. Generate or customize content quickly (including AI-assisted template generation).
-4. Queue campaign sends with controlled pacing and retries.
-5. Automatically deliver emails via Gmail API or SMTP path.
-6. Track opens using a secure tokenized tracking pixel.
-7. View status, delivery, failures, and open analytics in dashboard.
+---
 
-## 4. Core Product Features
+## 2. Architecture at a glance
 
-- OTP-secured auth (register/login/forgot/reset flow).
-- Bulk contact management with validation and CSV upload.
-- Personalized template engine for each recipient.
-- Campaign creation, scheduling, and send queue.
-- Async worker architecture for reliable high-volume sending.
-- Email-open tracking and analytics summary.
-- Smart Email Scheduling with Timezone Optimization
+```
+                            ┌────────────────────────────┐
+                            │   Browser (React SPA)      │
+                            │   Firebase Auth SDK        │
+                            └────────────┬───────────────┘
+                                         │
+                  ┌──────────────────────┼──────────────────────┐
+                  │ HTTPS (Bearer ID token)                     │ WSS
+                  │                                             │ /ws/mock-interview
+                  ▼                                             ▼
+        ┌───────────────────────────────────────────────────────────────┐
+        │        Render Web Service — single origin, single process     │
+        │                                                               │
+        │   Express API  ·  static React build  ·  ws signaling server  │
+        │   BullMQ workers (email + meeting reminders) in-process       │
+        └───┬───────────────┬───────────────┬───────────────┬───────────┘
+            │               │               │               │
+            ▼               ▼               ▼               ▼
+     ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────────┐
+     │  MongoDB   │  │   Redis    │  │  Firebase  │  │  External    │
+     │   Atlas    │  │  (Upstash) │  │   Admin    │  │  APIs        │
+     │            │  │            │  │            │  │              │
+     │ all app    │  │ BullMQ     │  │ verify ID  │  │ Gemini/Groq  │
+     │ data +     │  │ queues,    │  │ tokens     │  │ Gmail, JSearch│
+     │ resume PDF │  │ delayed    │  │ ONLY       │  │ Judge0, TURN │
+     └────────────┘  └────────────┘  └────────────┘  └──────────────┘
 
-## 5. High-Level Architecture
-
-MailPilot uses a client-server + queue-worker design:
-
-- Frontend: React + Vite SPA.
-- API backend: Express + MongoDB.
-- Queue: BullMQ on Redis.
-- Worker: Processes queued email jobs.
-- Providers: Gmail API and SMTP/Nodemailer.
-
-### Runtime Flow
-
-1. User interacts with dashboard in frontend.
-2. Frontend calls REST APIs with JWT auth.
-3. Backend validates/authenticates and persists to MongoDB.
-4. Campaign send request creates EmailLog entries and enqueues jobs.
-5. Worker consumes jobs, personalizes email, sends via provider.
-6. Tracking endpoint updates open events.
-7. Analytics endpoints return campaign and tracking metrics.
-
-## 6. Design Patterns Used
-
-### Layered Architecture
-
-- Routes -> Controllers -> Services -> Models -> Utils.
-- Keeps code modular and easy to maintain.
-
-### Queue-Based Asynchronous Processing
-
-- Email sending is handled out-of-band by workers.
-- Prevents API timeouts for large campaigns.
-
-### Middleware Pattern
-
-- Auth, validation, rate-limit, error handling are centralized.
-
-### Provider Strategy
-
-- Same send flow can switch between Gmail API and SMTP.
-
-## 7. Tech Stack
-
-### Frontend
-
-- React 18
-- Vite
-- React Router
-- Axios
-- Tailwind CSS
-- React Toastify
-
-### Backend
-
-- Node.js + Express
-- MongoDB + Mongoose
-- Redis + BullMQ
-- JWT + bcryptjs
-- express-validator
-- express-rate-limit
-- helmet + cors
-- nodemailer + googleapis
-- winston
-
-### Local Infra
-
-- Docker Compose for MongoDB and Redis.
-
-## 8. Why These Services
-
-### MongoDB
-
-- Stores users, OTP data, contacts, templates, campaigns, logs.
-- Flexible schema for product iteration.
-
-### Redis
-
-- Stores queue state and delayed/retry jobs.
-
-### BullMQ Worker
-
-- Sends emails reliably in background with retries and backoff.
-
-### Gmail API / SMTP
-
-- Supports flexible sender setups across users.
-
-### AI Assistant for Template Customization (Upcoming)
-
-- AI-powered template generation tailored to job descriptions.
-- Accelerates content creation with prompt-based customization.
-- Ensures system reliability via deterministic fallback without API dependency.
-
-## 9. Complete Project Structure
-
-```text
-MailPilot/
-  docker-compose.yml
-  package.json
-  vercel.json
-  README.md
-
-  client/
-    index.html
-    package.json
-    postcss.config.js
-    tailwind.config.js
-    vite.config.js
-    vercel.json
-    public/
-    src/
-      App.jsx
-      main.jsx
-      index.css
-      components/
-      context/
-      hooks/
-      pages/
-      services/
-      utils/
-
-  server/
-    package.json
-    .env.example
-    src/
-      app.js
-      server.js
-      config/
-      controllers/
-      jobs/
-      middlewares/
-      models/
-      queues/
-      routes/
-      services/
-      utils/
-
-  test-data/
-    dummy-contacts.csv
+     Video/audio never touches the server — it flows browser ↔ browser (P2P),
+     relayed by an external TURN server only when a direct path is blocked.
 ```
 
-## 10. API Modules
+**Request lifecycle**
 
-Base URL: http://localhost:4000/api
+1. Browser signs in with Firebase Auth (Google or email/password) and receives an ID token.
+2. Every API call sends `Authorization: Bearer <token>`; axios refreshes it transparently.
+3. `authenticate` middleware verifies the token with Firebase Admin, then upserts/loads the
+   matching Mongo user and sets `req.userId`.
+4. Route handlers work purely against MongoDB. Firebase is never consulted again.
+5. Long-running work (sending email, meeting reminders) is pushed to Redis-backed BullMQ
+   instead of blocking the request.
 
-### Auth
+---
 
-- POST /auth/register
-- POST /auth/verify-otp
-- POST /auth/resend-otp
-- POST /auth/login
-- POST /auth/forgot-password
-- POST /auth/reset-password
-- GET /auth/google/url
-- GET /auth/google/callback
+## 3. Why this shape
 
-### Users
+Decisions that aren't obvious, and the reasoning behind them:
 
-- GET /users/me/settings
-- GET /users/me/gmail/connect-url
-- GET /users/gmail/callback
-- PATCH /users/me/profile
-- PATCH /users/me/password
-- PATCH /users/me/settings
+**Single origin, one process.** The API, the built React app, and the WebSocket signaling server
+all run in one Render Web Service. This removes CORS complexity, avoids cross-domain WebSocket
+issues, and keeps Firebase Auth's redirect flow working (see below). Serverless platforms cannot
+hold persistent WebSocket connections, which the mock interview feature needs.
 
-### Campaigns
+**Firebase for identity, MongoDB for everything else.** Firebase gives battle-tested auth
+(Google sign-in, password reset, token refresh) for free. But application data lives in Mongo,
+where it can be queried and related properly. Firestore is deliberately not used.
 
-- GET /campaign
-- POST /campaign/create
-- POST /campaign/send/:id
-- GET /campaign/status/:id
+**Resume binaries live in MongoDB, not object storage.** Firebase Storage was never provisioned
+for this project, and the upload path failed silently — writing a pointer to a file that was never
+stored, so campaign attachments came out empty while the UI reported success. Storing the bytes in
+Mongo removed the whole class of failure. Resume PDFs are small and single-per-user, so this is a
+reasonable trade; it would need revisiting for larger files.
 
-### Contacts
+**Gmail API over SMTP.** Render (like most cloud hosts) blocks outbound SMTP ports 587/465 as an
+anti-spam measure. Campaigns appeared to send but silently timed out. The Gmail API works over
+HTTPS/443, so it bypasses the block entirely. Per-user Gmail app passwords were removed for the
+same reason — they can only work over SMTP.
 
-- GET /contacts
-- POST /contacts/bulk
-- POST /contacts/upload
-- PATCH /contacts/:id
-- PATCH /contacts/:id/subscription
+**Peer-to-peer video.** With exactly two participants, an SFU is unnecessary infrastructure. P2P
+keeps media off the server, so free-tier bandwidth limits are irrelevant. TURN is bought rather
+than built, because Render exposes a single HTTP port and no UDP — self-hosting coturn is impossible.
 
-### Templates
+---
 
-- GET /templates
-- POST /templates/ai-generate
-- POST /templates
-- PATCH /templates/:id
-- DELETE /templates/:id
+## 4. Data stores — who owns what
 
-### Analytics and Tracking
+| Store | Hosted | Holds | Notably does *not* hold |
+|---|---|---|---|
+| **MongoDB** | Atlas | All application data, resume PDFs, embedding vectors | — |
+| **Redis** | Upstash (TLS) | BullMQ job queues, delayed reminder jobs | Nothing durable — safe to flush |
+| **Firebase** | Google | User identity, credentials, sessions | No app data, no files, no Firestore |
 
-- GET /analytics/summary
-- GET /email-tracking
-- GET /track
-- GET /api/health
+Firebase and MongoDB are joined on `email` / `firebaseUid`. A Mongo `User` document is created
+on first authenticated request, so there is no separate registration write path to keep in sync.
 
-## 11. Request and Response Examples
+---
 
-Notes:
+## 5. MongoDB collections
 
-- Protected endpoints require Authorization: Bearer <jwt>
-- Standard error shape: { "message": "..." }
+| Collection | Purpose | Key fields |
+|---|---|---|
+| `users` | Account + sending identity | `email`, `firebaseUid`, `role`, `smtpUser`, `gmailRefreshTokenEnc` |
+| `resumes` | Resume text, links, embeddings | `content`, `embedding.chunks[].vector`, `fileName` |
+| `resumefiles` | The raw PDF/DOCX bytes | `data` (Buffer), `mimeType`, `size` |
+| `contacts` | Outreach recipients | `email`, `name`, `company`, `subscribed` |
+| `templates` | Reusable email bodies | `subject`, `body`, `textContent` |
+| `campaigns` | A send job | `subject`, `content`, `status`, `attachResume`, `stats` |
+| `emaillogs` | Per-recipient delivery + opens | `status`, `trackingToken`, `openCount`, `openHistory` |
+| `jobs` | Recruiter posts + external listings | `externalSource`, `applyUrl`, `skills`, `postedBy` |
+| `roadmaps` | Generated learning plans | `stages[].topics[]`, `resources` |
+| `careerfits` | Career Fit analyses | `strengths`, `skillGaps`, `targetRoles` |
+| `discussions` | Community threads | `title`, `body`, `replies[]`, `upvotes` |
+| `mockinterviewrooms` | Video rooms + scheduled meetings | `code`, `scheduledAt`, `expiresAt`, `participants[]` |
+| `feedback` | In-app feedback | `message`, `page`, `status` |
 
-### 1. Register
+Two TTL/expiry details worth knowing:
+- `mockinterviewrooms` expire via an explicit `expiresAt` derived from `scheduledAt + duration`,
+  recomputed on save. An earlier `createdAt`-relative TTL would have deleted any meeting booked
+  more than 24h ahead *before it happened*.
+- `resumes` are unique per user — re-uploading replaces the document wholesale, so stale chunks
+  and vectors cannot survive.
 
-POST /auth/register
+---
 
-Request:
+## 6. Firebase — auth only
 
-```json
-{
-  "email": "user@example.com",
-  "password": "Str0ng@Pass",
-  "name": "Demo User"
-}
+**Used for**
+- Email/password sign-in and registration
+- Google sign-in (`signInWithRedirect`)
+- Password reset
+- ID token issue and refresh
+- Server-side token verification via Firebase Admin
+
+**Not used for:** Firestore, Storage, Functions, Hosting, Analytics.
+
+Server-side, the entire Firebase surface is two functions: `getFirebaseAdmin()` and
+`verifyFirebaseToken()`.
+
+### The auth-domain proxy
+
+Google sign-in initially failed in production. Firebase's redirect flow resolves its result through
+a hidden iframe pointed at `authDomain`. When `authDomain` is on a different origin than the app,
+browser storage partitioning blocks that iframe — so sign-in silently never completed.
+
+The fix follows Firebase's own guidance: `VITE_FIREBASE_AUTH_DOMAIN` is set to the app's own domain,
+and `/__/auth/*` is reverse-proxied to `<project>.firebaseapp.com` ([app.js](server/src/app.js)).
+Auth then runs same-origin and partitioning never applies. This also requires
+`https://<your-domain>/__/auth/handler` to be registered as an authorised redirect URI in Google
+Cloud Console.
+
+---
+
+## 7. The AI layer
+
+Every AI feature routes through one function, `generateStructuredAi()` in
+[aiCore.service.js](server/src/services/ai/aiCore.service.js), which tries providers in order and
+falls through on failure:
+
+```
+Gemini  →  Groq  →  Ollama (local)  →  OpenAI
 ```
 
-Response 202:
+The cascade means a missing or rate-limited key degrades the feature rather than breaking it. Local
+Ollama sits third so self-hosted runs keep working offline; its longer timeout is why the client's
+HTTP timeout is 35s.
 
-```json
-{
-  "message": "OTP sent to your email",
-  "purpose": "register",
-  "email": "u***@example.com",
-  "expiresIn": 300,
-  "resendAfter": 30
-}
+| Provider | Model (default) | Role |
+|---|---|---|
+| Gemini | `gemini-2.0-flash` | Primary — generation and embeddings |
+| Groq | configurable | Fast cloud fallback |
+| Ollama | `qwen2.5-coder:0.5b` | Local/offline fallback |
+| OpenAI | configurable | Last resort |
+
+**Features built on it:** template generation, resume analysis, Career Fit, interview questions,
+coach chat, learning roadmaps, AI job-post drafting.
+
+### Retrieval (RAG)
+
+Resume text is chunked (~400 chars, 100 overlap) and embedded with Gemini embeddings, stored inline
+on the resume document. Queries embed and rank by cosine similarity.
+
+When embeddings are unavailable, vectors are **omitted rather than faked**, and retrieval falls back
+to a hand-rolled TF-IDF lexical search ([rag.service.js](server/src/services/ai/rag.service.js)).
+Quality degrades; the feature keeps working.
+
+---
+
+## 8. External APIs
+
+| Service | Used for | Env var | Failure mode |
+|---|---|---|---|
+| **Firebase Auth** | Identity, token verification | `FIREBASE_*` | Auth routes return 503 |
+| **Gemini** | AI generation + embeddings | `GOOGLE_API_KEY` | Cascades to Groq |
+| **Groq** | AI fallback | `GROQ_API_KEY` | Cascades to Ollama |
+| **OpenAI** | AI last resort | `OPENAI_API_KEY` | Cascade exhausted → error |
+| **Ollama** | Local AI | `OLLAMA_URL` | Skipped if unreachable |
+| **Gmail API** | Sending campaign email | `GMAIL_CLIENT_ID/SECRET` | Falls back to SMTP config |
+| **JSearch** (RapidAPI) | External job listings | `RAPIDAPI_JSEARCH_KEY` | Board shows internal jobs only |
+| **Judge0 CE** (RapidAPI) | Running sandbox code | `RAPIDAPI_KEY` | Sandbox returns a clear error |
+| **ExpressTURN** | WebRTC relay | `TURN_URLS/USERNAME/CREDENTIAL` | Degrades to STUN-only |
+| **MongoDB Atlas** | Database | `MONGODB_URI` | Server exits on boot |
+| **Upstash Redis** | Queues | `REDIS_*` | Server exits on boot |
+
+Every integration degrades deliberately rather than crashing, except the two data stores — those
+fail fast at boot with an explicit message, because running without them is meaningless.
+
+---
+
+## 9. Email delivery pipeline
+
+```
+Create campaign
+      │
+      ▼
+Campaign + one EmailLog per recipient written to Mongo
+      │
+      ▼
+Jobs pushed to BullMQ ─────► Redis
+      │
+      ▼
+Email worker (1 job/sec, concurrency 1)
+      │
+      ├─ render {{placeholders}} per recipient
+      ├─ inject signed tracking pixel
+      ├─ attach resume PDF (if campaign opted in)
+      │
+      ▼
+sendCampaignMail()
+      │
+      ├─ 1. Gmail API (OAuth, HTTPS)      ← the real path in production
+      └─ 2. SMTP (self-hosting / local dev)
+      │
+      ▼
+EmailLog updated: sent | failed + provider message id
 ```
 
-### 2. Login (Verified)
+Throughput is intentionally throttled (`EMAIL_RATE_LIMIT_MAX=1`/sec) — this is outreach, not bulk
+marketing, and Gmail enforces its own limits.
 
-POST /auth/login
+**Open tracking.** Each email embeds a 1×1 pixel at `/track?token=<jwt>`. The JWT is signed and
+scoped to a single `EmailLog`, so opens can't be forged by guessing an id. The endpoint records
+open count and history, and is rate-limited.
 
-Response 200:
+---
 
-```json
-{
-  "token": "jwt-token",
-  "user": {
-    "id": "6610d4c7c1f0eac4f6b1f91a",
-    "email": "user@example.com",
-    "name": "Demo User",
-    "isVerified": true
-  }
-}
+## 10. Live Practice Room (WebRTC)
+
+```
+Browser A                    Server                    Browser B
+    │                          │                           │
+    │──── WSS /ws/mock-interview (Firebase token in query) ─┤
+    │                          │                           │
+    │◄──── offer / answer / ICE candidates relayed ────────►│
+    │                          │                           │
+    │══════════ media flows directly, P2P ═════════════════│
+    │                                                       │
+    └───────── or via TURN relay if a direct path fails ────┘
 ```
 
-### 3. Login (Unverified, OTP Auto-Sent)
+The server relays signalling only; it never sees audio or video.
 
-POST /auth/login
+**Details that matter**
+- The room creator is a **fixed** initiator — deriving it from connection order is racy under
+  reconnects and React StrictMode double-invokes.
+- ICE candidates arriving before `setRemoteDescription` resolves are **queued and flushed**, not
+  dropped — dropping them starves ICE and the call silently never connects.
+- TURN credentials are served per-session from `/api/mock-interview/ice-servers`, never bundled
+  into the client.
+- `getUserMedia` degrades: video+audio → audio-only → video-only, so a device without a webcam
+  still joins.
+- Room state is in-memory, which assumes a single server process. Horizontal scaling would need
+  Redis pub/sub.
 
-Response 403:
+**Scheduling.** Meetings can be booked ahead, with an optional `.ics` calendar invite emailed via
+the same Gmail path, and a reminder queued through BullMQ. The join window opens 10 minutes before
+the start and closes 30 minutes after the scheduled end.
 
-```json
-{
-  "message": "Email not verified. OTP sent to your email.",
-  "requiresOtp": true,
-  "purpose": "register",
-  "email": "u***@example.com",
-  "expiresIn": 300,
-  "resendAfter": 30
-}
-```
+---
 
-### 4. Create Campaign
+## 11. API surface
 
-POST /campaign/create
+All routes are under `/api` and require `Authorization: Bearer <firebase-id-token>` unless noted.
 
-Request:
+| Mount | Responsibility |
+|---|---|
+| `/api/users` | Settings, profile, Gmail OAuth connect + callback |
+| `/api/contacts` | CRUD, CSV import, unsubscribe |
+| `/api/templates` | CRUD + AI enhance |
+| `/api/campaign` | Create, send, status, per-recipient results |
+| `/api/resumes` | Upload, replace, fetch, delete (4 MB JSON limit) |
+| `/api/ai` | Interview prep, coach chat, generic generation |
+| `/api/career` | Career Fit analysis |
+| `/api/roadmaps` | Learning roadmap generation |
+| `/api/jobs` | Job board, recruiter posting |
+| `/api/mock-interview` | Rooms, scheduled meetings, ICE servers |
+| `/api/discussions` | Community threads and replies |
+| `/api/code` | Judge0 sandbox execution |
+| `/api/analytics` | Dashboard aggregates |
+| `/api/email-tracking` | Open reporting |
+| `/api/feedback` | Feedback (auth optional) |
+| `/track` | Tracking pixel (public, token-scoped) |
+| `/ws/mock-interview` | WebRTC signalling (WebSocket) |
 
-```json
-{
-  "name": "SE Outreach",
-  "subject": "Application for {{company}}",
-  "content": "<p>Hello {{name}}</p>",
-  "textContent": "Hello {{name}}",
-  "contactIds": ["6610d9c6c1f0eac4f6b1f925"],
-  "scheduledAt": "2026-04-06T08:00:00.000Z"
-}
-```
+---
 
-Response 201:
+## 12. Security model
 
-```json
-{
-  "campaign": {
-    "_id": "6610e0b1c1f0eac4f6b1f940",
-    "name": "SE Outreach",
-    "status": "pending"
-  }
-}
-```
+- **Auth**: Firebase ID tokens verified server-side on every request. No hand-rolled sessions.
+- **Secrets at rest**: Gmail refresh tokens are encrypted with **AES-256-GCM** before storage
+  ([secretCrypto.js](server/src/utils/secretCrypto.js)); production requires a 64-hex-char key.
+- **Tracking tokens**: JWTs scoped to a single EmailLog, expiring in 7 days.
+- **Headers**: Helmet with an explicit CSP allow-list for Google auth, cdnjs (pdf.js/mammoth),
+  jsDelivr (Pyodide), and `wasm-unsafe-eval`.
+- **Rate limiting**: global API limiter plus tighter per-feature limits on room creation and
+  tracking-pixel hits.
+- **Authorisation**: recruiter-only routes gated by `requireRecruiter`; every query is scoped
+  by `req.userId`, so cross-tenant reads aren't possible by id guessing.
+- **Uploads**: type and size constrained; resume bytes stored in Mongo, never on disk.
 
-### 5. Send Campaign
+---
 
-POST /campaign/send/:id
+## 13. Tech stack
 
-Response 200:
+**Frontend** — React 18, Vite, React Router, Tailwind CSS, axios, react-toastify, Firebase JS SDK
 
-```json
-{
-  "message": "Campaign queued for delivery",
-  "campaign": {
-    "_id": "6610e0b1c1f0eac4f6b1f940",
-    "status": "processing",
-    "stats": {
-      "total": 120,
-      "sent": 0,
-      "failed": 0
-    }
-  }
-}
-```
+**Backend** — Node.js 22, Express, Mongoose, BullMQ, ioredis, `ws`, Helmet, Winston,
+firebase-admin, googleapis, nodemailer, multer, express-validator
 
-### 6. Contacts Bulk Import
+**Infrastructure** — Render (web service), MongoDB Atlas, Upstash Redis, Firebase Auth,
+ExpressTURN, Docker Compose (local Mongo + Redis)
 
-POST /contacts/bulk
+---
 
-Request:
+## 14. Running locally
 
-```json
-{
-  "contacts": [
-    {
-      "email": "candidate@example.com",
-      "name": "Candidate Name",
-      "company": "Example Inc"
-    }
-  ]
-}
-```
-
-Response 201:
-
-```json
-{
-  "contactIds": ["6610d9c6c1f0eac4f6b1f925"],
-  "count": 1
-}
-```
-
-### 7. Analytics Summary
-
-GET /analytics/summary
-
-Response 200:
-
-```json
-{
-  "summary": {
-    "totalCampaigns": 12,
-    "totalRecipients": 1200,
-    "totalSent": 1100,
-    "totalFailed": 100,
-    "pendingCampaigns": 2,
-    "processingCampaigns": 1,
-    "completedCampaigns": 9,
-    "deliveryRate": 91.66,
-    "failureRate": 8.33,
-    "successRate": 91.66
-  }
-}
-```
-
-### 8. Email Tracking List
-
-GET /email-tracking?page=1&limit=10&sort=recently-opened
-
-Response 200:
-
-```json
-{
-  "items": [
-    {
-      "campaignName": "SE Outreach",
-      "opened": true,
-      "openCount": 3,
-      "email": "candidate@example.com"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 1,
-    "totalPages": 1,
-    "hasNextPage": false,
-    "hasPrevPage": false
-  }
-}
-```
-
-## 12. Sequence Diagrams
-
-### Login with OTP for Unverified User
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant U as User
-  participant FE as Frontend
-  participant API as Auth API
-  participant DB as MongoDB
-  participant OTP as OTP Mail Service
-
-  U->>FE: Submit email + password
-  FE->>API: POST /api/auth/login
-  API->>DB: Validate user
-  DB-->>API: isVerified = false
-  API->>DB: Save OTP with expiry
-  API->>OTP: Send OTP mail
-  API-->>FE: 403 requiresOtp=true
-  FE->>FE: Redirect /verify-otp
-  U->>FE: Enter OTP
-  FE->>API: POST /api/auth/verify-otp
-  API->>DB: Verify OTP + mark verified
-  API-->>FE: success
-```
-
-### Campaign Send Pipeline
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant U as User
-  participant FE as Frontend
-  participant API as Campaign API
-  participant DB as MongoDB
-  participant Q as Redis/BullMQ
-  participant W as Worker
-  participant ESP as Gmail API/SMTP
-  participant T as Tracking
-
-  U->>FE: Click Send Campaign
-  FE->>API: POST /api/campaign/send/:id
-  API->>DB: Validate + create EmailLogs
-  API->>Q: Enqueue jobs
-  API-->>FE: queued response
-
-  loop each recipient
-    W->>Q: Pull job
-    W->>DB: Load campaign/contact/log
-    W->>W: Personalize email + pixel
-    W->>ESP: Send
-    W->>DB: Update sent/failed stats
-  end
-
-  U->>T: Open email
-  T->>DB: Increase openCount
-  T-->>U: Return 1x1 gif
-```
-
-## 13. Queue and Worker Flow
-
-1. User sends campaign.
-2. API validates campaign and recipient list.
-3. Email logs are created in queued state.
-4. Jobs are added to BullMQ with delay, jitter, retry policy.
-5. Worker consumes jobs and sends email through configured provider.
-6. Stats are updated in campaign and email logs.
-7. Campaign status moves to completed when all recipients are done.
-
-## 14. Personalization and Tracking
-
-### Personalization Tokens
-
-- {{name}}
-- {{email}}
-- {{company}}
-- {{role}}
-
-### Tracking
-
-- Each email log receives a signed tracking token.
-- Worker appends tracking pixel URL to email HTML.
-- /track endpoint increments open count and open history.
-
-## 15. Environment Configuration
-
-Use server/.env.example as baseline.
-
-Key variable groups:
-
-- HTTP/CORS: PORT, FRONTEND_URL, BACKEND_PUBLIC_URL
-- Database/Queue: MONGODB_URI, REDIS_HOST, REDIS_PORT
-- Auth: JWT_SECRET, JWT_EXPIRES_IN, OTP expiry/cooldown
-- Email: provider settings, Gmail OAuth, SMTP credentials
-- Worker: RUN_EMAIL_WORKER, concurrency, rate limits
-- AI: OPENAI_API_KEY, OPENAI_MODEL
-
-## 16. Local Development Setup
-
-### Prerequisites
-
-- Node.js 18+
-- npm
-- Docker Desktop
-
-### Steps
-
-1. Install dependencies:
+**Prerequisites:** Node.js 22.x, Docker (or your own Mongo + Redis), a Firebase project.
 
 ```bash
+git clone https://github.com/Vaibhavlanjewar/MailPilot.git
+cd MailPilot
 npm install
 ```
 
-2. Start MongoDB + Redis:
+Start Mongo and Redis:
 
 ```bash
 npm run docker:up
 ```
 
-3. Copy env file:
-
-- Copy server/.env.example to server/.env
-- Fill required values
-
-4. Start full app:
+Create `.env` in the repo root (see [Environment variables](#15-environment-variables)), then:
 
 ```bash
 npm run dev
 ```
 
-### Optional Separate Worker Mode
+Client on `http://localhost:5173`, API on `http://localhost:4000`.
 
-1. Set RUN_EMAIL_WORKER=false in server/.env.
-2. Start API and worker separately:
+Other scripts:
 
 ```bash
-npm run dev:server
-npm run worker -w server
-npm run dev:client
+npm run build          # build the client
+npm start              # serve the built client + API from Express
+npm run docker:down    # stop local Mongo/Redis
 ```
 
-## 17. Deployment Notes
+> **Working against production data?** Set `RUN_EMAIL_WORKER=false` locally. Otherwise your machine
+> competes with the deployed worker for the same Redis queue and will process real user campaigns.
 
-- Live app: https://mail-pilot-mu-one.vercel.app/
-- Frontend can be hosted on Vercel (client/dist).
-- Backend needs MongoDB + Redis in production.
-- Set proper CORS origins and BACKEND_PUBLIC_URL for tracking.
-- Keep JWT and encryption secrets secure.
+---
 
-## 18. Core Outreach Flow for Job Seekers
+## 15. Environment variables
 
-1. Upload/import recruiter contacts.
-2. Create one smart template with personalization fields.
-3. Launch campaign to hundreds of recipients quickly.
-4. Let queue + worker automate safe sending.
-5. Track who opened your emails and prioritize follow-ups.
+### Required
 
-This is the core promise of MailPilot: fast, personalized, automated cold outreach for job seekers at scale.
+```bash
+MONGODB_URI=mongodb+srv://...
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_TLS=false                 # true for Upstash
+
+JWT_SECRET=<random-string>
+
+FIREBASE_PROJECT_ID=
+FIREBASE_CLIENT_EMAIL=
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=      # your own domain in prod, see §6
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+```
+
+### Email sending
+
+```bash
+GMAIL_CLIENT_ID=
+GMAIL_CLIENT_SECRET=
+GMAIL_REDIRECT_URI=https://<host>/api/users/gmail/callback
+SMTP_CREDENTIALS_ENCRYPTION_KEY=  # exactly 64 hex chars
+
+RUN_EMAIL_WORKER=true
+EMAIL_WORKER_CONCURRENCY=1
+EMAIL_RATE_LIMIT_MAX=1
+```
+
+Generate the encryption key with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### AI (all optional — the cascade skips what's missing)
+
+```bash
+GOOGLE_API_KEY=
+GEMINI_MODEL=gemini-2.0-flash
+GROQ_API_KEY=
+OPENAI_API_KEY=
+OLLAMA_URL=http://127.0.0.1:11434
+```
+
+### Feature integrations (optional)
+
+```bash
+RAPIDAPI_KEY=                   # Judge0 code sandbox
+RAPIDAPI_JSEARCH_KEY=           # external job listings
+
+TURN_URLS=turn:host:3478,turn:host:3478?transport=tcp
+TURN_USERNAME=
+TURN_CREDENTIAL=
+```
+
+---
+
+## 16. Deployment
+
+Deployed to Render as a **single Web Service** via [render.yaml](render.yaml). Pushing to `main`
+auto-deploys.
+
+```yaml
+buildCommand: npm install --include=dev && npm run build
+startCommand: npm start
+```
+
+Platform specifics that were learned the hard way:
+
+| Issue | Resolution |
+|---|---|
+| `vite: not found` at build | `NODE_ENV=production` makes npm skip devDependencies — `--include=dev` is required |
+| MongoDB TLS handshake failure | Node 24 default broke Atlas TLS; pinned to 22.20.0 via `.node-version`, `engines`, and `NODE_VERSION` |
+| Atlas connection refused | Render has no static egress IP — Atlas Network Access needs `0.0.0.0/0` |
+| Campaigns "sent" but never delivered | Render blocks outbound SMTP; must use the Gmail API |
+| Google sign-in never completing | Storage partitioning — needs the `/__/auth` proxy (§6) |
+| `ERR_HTTP_HEADERS_SENT` on every page | `res.sendFile`'s callback fires on success too; only call `next(err)` when `err` is set |
+
+Secrets are never committed. Every `sync: false` var in `render.yaml` is filled from the Render
+dashboard.
+
+---
+
+## 17. Known limitations
+
+- **Free-tier sleep.** The instance sleeps after ~15 minutes idle. First request takes ~50s, and
+  BullMQ delayed jobs (meeting reminders) don't fire while asleep — they run when it next wakes.
+  An external uptime pinger on `/api/health` is the practical fix.
+- **Single process assumption.** WebRTC room state is in-memory; horizontal scaling needs Redis
+  pub/sub.
+- **No TURN over TLS/443.** Networks blocking UDP *and* non-standard TCP ports may still fail.
+- **Resume binaries in MongoDB.** Fine at one small file per user; object storage would be the
+  right answer for larger uploads.
+- **Client bundle is ~1 MB.** No code splitting yet.
+- **Gemini embeddings required for good retrieval.** Without a valid key, RAG silently falls back
+  to lexical TF-IDF — it works, but results are noticeably weaker.
