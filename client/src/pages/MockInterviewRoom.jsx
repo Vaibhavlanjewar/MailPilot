@@ -71,7 +71,8 @@ export default function MockInterviewRoom() {
   const [camOn, setCamOn] = useState(true);
   const [peerName, setPeerName] = useState('');
   const [needsUnmute, setNeedsUnmute] = useState(false);
-  const [devices, setDevices] = useState({ hasVideo: true, hasAudio: true });
+  const [devices, setDevices] = useState({ hasVideo: true, hasAudio: true, mics: 0, cams: 0 });
+  const [remoteHasAudio, setRemoteHasAudio] = useState(null); // null = unknown yet
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -110,7 +111,15 @@ export default function MockInterviewRoom() {
     pc.ontrack = (e) => {
       const video = remoteVideoRef.current;
       if (!video) return;
-      video.srcObject = e.streams[0];
+      const [remoteStream] = e.streams;
+      video.srcObject = remoteStream;
+      // Tells the two failure modes apart: they aren't sending audio at all,
+      // versus they are and it isn't coming out of our speakers.
+      setRemoteHasAudio(remoteStream.getAudioTracks().length > 0);
+      // A previous autoplay fallback may have left the element muted; without
+      // clearing it here a reconnect would stay permanently silent.
+      video.muted = false;
+      setNeedsUnmute(false);
       // Browsers block autoplay of unmuted media without a prior user gesture
       // on the tab — very likely for whoever opened the invite link fresh.
       // Fall back to muted playback and let them opt in to sound.
@@ -191,7 +200,21 @@ export default function MockInterviewRoom() {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
-      setDevices({ hasVideo, hasAudio });
+
+      // enumerateDevices only reports real labels/counts once permission has
+      // been granted, so it has to run after getUserMedia, not before. This
+      // distinguishes "hardware isn't there" from "we failed to open it".
+      let detected = { mics: 0, cams: 0 };
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices();
+        detected = {
+          mics: list.filter((d) => d.kind === 'audioinput').length,
+          cams: list.filter((d) => d.kind === 'videoinput').length,
+        };
+      } catch {
+        // Diagnostics only — never block the call on this.
+      }
+      setDevices({ hasVideo, hasAudio, ...detected });
       setCamOn(hasVideo);
       setMicOn(hasAudio);
       localStreamRef.current = stream;
@@ -401,6 +424,23 @@ export default function MockInterviewRoom() {
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-app">
           No camera found on this device, so you've joined with audio only. The other person can
           still see and hear you as normal — they just won't see your video.
+        </div>
+      )}
+
+      {status !== 'scheduled' && status !== 'error' && !devices.hasAudio && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-app">
+          <p className="font-semibold">They can't hear you — no microphone is available.</p>
+          <p className="mt-1 text-app-muted">
+            {devices.mics > 0
+              ? `Windows sees ${devices.mics} microphone${devices.mics > 1 ? 's' : ''}, but the browser couldn't open one. It's usually another app holding it (Zoom/Teams/Meet), or the site's mic permission is blocked — check the icon at the left of the address bar, then reload.`
+              : 'No microphone is connected to this device at all. Plug in a headset or USB mic, or check Windows Settings → Privacy & security → Microphone, then reload.'}
+          </p>
+        </div>
+      )}
+
+      {status === 'connected' && remoteHasAudio === false && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-app">
+          You can't hear them because they joined without a microphone — nothing is wrong on your end.
         </div>
       )}
 
