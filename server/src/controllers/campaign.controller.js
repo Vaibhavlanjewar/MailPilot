@@ -4,6 +4,7 @@ import { EmailLog } from '../models/EmailLog.js';
 import { Contact } from '../models/Contact.js';
 import { AppError } from '../utils/AppError.js';
 import { enqueueCampaignSend } from '../services/campaign.queue.service.js';
+import { getEmailQueue } from '../queues/email.queue.js';
 import { logger } from '../utils/logger.js';
 import { CAMPAIGN_DAILY_USER_LIMIT, CAMPAIGN_MAX_RECIPIENTS } from '../constants/campaignLimits.js';
 
@@ -113,6 +114,72 @@ export async function sendCampaign(req, res, next) {
     res.json({
       message: 'Campaign queued for delivery',
       campaign,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Deletes a campaign and everything hanging off it. EmailLogs are the bulk of
+ * the storage (one document per recipient), so they're the real reason to
+ * delete — the campaign document itself is small.
+ *
+ * Any still-queued jobs are removed first. The BullMQ job id is the EmailLog
+ * id (see enqueueCampaignSend), so they can be targeted exactly rather than
+ * scanned for. Skipping this would leave workers to pick up jobs whose
+ * EmailLog no longer exists.
+ */
+export async function deleteCampaign(req, res, next) {
+  try {
+    const campaign = await Campaign.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+    });
+
+    if (!campaign) {
+      throw new AppError('Campaign not found', 404);
+    }
+
+    const logs = await EmailLog.find({ campaignId: campaign._id })
+      .select('_id status')
+      .lean();
+
+    // Only pending jobs can still be in the queue; sent/failed ones have
+    // already run and been cleaned up by removeOnComplete/removeOnFail.
+    const pendingIds = logs
+      .filter((log) => log.status !== 'sent' && log.status !== 'failed')
+      .map((log) => String(log._id));
+
+    let cancelledJobs = 0;
+    if (pendingIds.length) {
+      const queue = getEmailQueue();
+      const results = await Promise.allSettled(
+        pendingIds.map(async (jobId) => {
+          const job = await queue.getJob(jobId);
+          // An active job can't be removed; it will fail harmlessly on its own
+          // once its EmailLog is gone (processEmailJob throws UnrecoverableError).
+          if (job) await job.remove();
+          return Boolean(job);
+        }),
+      );
+      cancelledJobs = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+    }
+
+    const { deletedCount } = await EmailLog.deleteMany({ campaignId: campaign._id });
+    await Campaign.deleteOne({ _id: campaign._id });
+
+    logger.info('Campaign deleted', {
+      campaignId: String(campaign._id),
+      emailLogsDeleted: deletedCount,
+      cancelledJobs,
+    });
+
+    res.json({
+      success: true,
+      message: 'Campaign deleted',
+      emailLogsDeleted: deletedCount,
+      cancelledJobs,
     });
   } catch (err) {
     next(err);

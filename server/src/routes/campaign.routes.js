@@ -49,4 +49,12 @@ router.get(
   campaignController.getCampaignStatus
 );
 
+router.delete(
+  '/:id',
+  authenticate,
+  param('id').isMongoId().withMessage('invalid campaign id'),
+  validateRequest,
+  campaignController.deleteCampaign
+);
+
 export default router;
