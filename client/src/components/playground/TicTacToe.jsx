@@ -141,9 +141,7 @@ function VsCandidate() {
   const wsRef = useRef(null);
   const sessionRef = useRef(0);
 
-  const shareUrl = roomCode
-    ? `${window.location.origin}/app/interview-prep?game=${roomCode}`
-    : '';
+  const shareUrl = roomCode ? `${window.location.origin}/app/mind-games?game=${roomCode}` : '';
 
   // Someone opening a shared link should land straight in that game.
   useEffect(() => {

@@ -1,20 +1,13 @@
-import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 import ProviderBadge from '../components/ui/ProviderBadge';
 
-// Four boards plus their algorithms are dead weight for anyone who never opens
-// this tab, and the main bundle is already large — so load it on demand.
-const AlgorithmPlayground = lazy(() => import('../components/playground/AlgorithmPlayground'));
-
-const TABS = ['Prep Plan', 'Chat', 'Code Sandbox', 'Playground'];
+const TABS = ['Prep Plan', 'Chat', 'Code Sandbox'];
 
 export default function InterviewPrep() {
-  // A shared game link (?game=<code>) should open straight into the playground.
-  const [tab, setTab] = useState(() =>
-    new URLSearchParams(window.location.search).get('game') ? 'Playground' : 'Prep Plan',
-  );
+  const [tab, setTab] = useState('Prep Plan');
   const [jobDescription, setJobDescription] = useState('');
   const [resume, setResume] = useState(null);
   const [resumeLoading, setResumeLoading] = useState(true);
@@ -71,11 +64,6 @@ export default function InterviewPrep() {
       {tab === 'Prep Plan' && <PrepPlanTab jobDescription={jobDescription} onSwitchToChat={() => setTab('Chat')} />}
       {tab === 'Chat' && <ChatTab jobDescription={jobDescription} hasResume={Boolean(resume)} />}
       {tab === 'Code Sandbox' && <CodeSandboxTab />}
-      {tab === 'Playground' && (
-        <Suspense fallback={<p className="text-sm text-app-muted">Loading playground…</p>}>
-          <AlgorithmPlayground />
-        </Suspense>
-      )}
     </div>
   );
 }

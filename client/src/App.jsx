@@ -28,6 +28,7 @@ import MockInterviewRoom from './pages/MockInterviewRoom';
 import ComingSoon from './pages/ComingSoon';
 import { LIVE_PRACTICE_ROOM_ENABLED } from './config/features';
 import Community from './pages/Community';
+import MindGames from './pages/MindGames';
 import MyResume from './pages/MyResume';
 import ResumeRag from './pages/ResumeRag';
 import Roadmap from './pages/Roadmap';
@@ -92,6 +93,7 @@ export default function App() {
             }
           />
           <Route path="community" element={<Community />} />
+          <Route path="mind-games" element={<MindGames />} />
 
           {/* Account */}
           <Route path="settings" element={<Settings />} />
