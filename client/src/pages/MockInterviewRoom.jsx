@@ -17,6 +17,34 @@ const FALLBACK_ICE_SERVERS = [
 const CONNECT_TIMEOUT_MS = 20_000;
 
 /**
+ * Plenty of desktops have a mic but no webcam. Asking for both at once fails
+ * outright in that case (NotFoundError), which would block an audio-only
+ * practice call that would otherwise work fine — so degrade instead of failing.
+ *
+ * @returns {Promise<{ stream: MediaStream, hasVideo: boolean, hasAudio: boolean }>}
+ */
+async function getBestAvailableStream() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    return { stream, hasVideo: true, hasAudio: true };
+  } catch (err) {
+    // A denied *permission* is the user's decision and shouldn't be retried as
+    // something else; only a missing device is worth falling back for.
+    if (err.name !== 'NotFoundError' && err.name !== 'OverconstrainedError') throw err;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+    return { stream, hasVideo: false, hasAudio: true };
+  } catch (err) {
+    if (err.name !== 'NotFoundError' && err.name !== 'OverconstrainedError') throw err;
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  return { stream, hasVideo: true, hasAudio: false };
+}
+
+/**
  * Frontend and backend are separate deployments (Vercel + Render), so the
  * signaling WS can't just reuse window.location.host like it can in local
  * dev — it has to target the same backend api.js points REST calls at.
@@ -43,6 +71,7 @@ export default function MockInterviewRoom() {
   const [camOn, setCamOn] = useState(true);
   const [peerName, setPeerName] = useState('');
   const [needsUnmute, setNeedsUnmute] = useState(false);
+  const [devices, setDevices] = useState({ hasVideo: true, hasAudio: true });
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -157,11 +186,14 @@ export default function MockInterviewRoom() {
       }
       if (sessionIdRef.current !== mySession) return;
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const { stream, hasVideo, hasAudio } = await getBestAvailableStream();
       if (sessionIdRef.current !== mySession) {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
+      setDevices({ hasVideo, hasAudio });
+      setCamOn(hasVideo);
+      setMicOn(hasAudio);
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
@@ -276,11 +308,19 @@ export default function MockInterviewRoom() {
       };
     } catch (err) {
       setStatus('error');
-      setErrorMessage(
-        err.name === 'NotAllowedError'
-          ? 'Camera/microphone permission was denied — allow access and reload.'
-          : err.message || 'Could not start the call.',
-      );
+      if (err.name === 'NotAllowedError') {
+        setErrorMessage('Camera/microphone permission was denied — allow access and reload.');
+      } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+        setErrorMessage(
+          'No camera or microphone was found on this device. Plug one in (or join from a phone/laptop that has one) and reload.',
+        );
+      } else if (err.name === 'NotReadableError') {
+        setErrorMessage(
+          'Your camera or microphone is already in use by another app. Close it (Zoom, Teams, Meet) and reload.',
+        );
+      } else {
+        setErrorMessage(err.message || 'Could not start the call.');
+      }
     }
   }, [code, createPeerConnection]);
 
@@ -357,6 +397,13 @@ export default function MockInterviewRoom() {
         </div>
       )}
 
+      {status !== 'scheduled' && status !== 'error' && !devices.hasVideo && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-app">
+          No camera found on this device, so you've joined with audio only. The other person can
+          still see and hear you as normal — they just won't see your video.
+        </div>
+      )}
+
       {status === 'waiting' && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-app">
           Waiting for the other person to join. Share the invite link above with them.
@@ -374,6 +421,11 @@ export default function MockInterviewRoom() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-black">
           <video ref={localVideoRef} autoPlay playsInline muted className="aspect-video w-full object-cover" />
+          {!devices.hasVideo && (
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-white/60">
+              Audio only — no camera on this device
+            </div>
+          )}
           <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-[10px] text-white">You</span>
         </div>
         <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-black">
@@ -402,7 +454,9 @@ export default function MockInterviewRoom() {
       <div className="flex justify-center gap-3">
         <button
           onClick={toggleMic}
-          className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+          disabled={!devices.hasAudio}
+          title={devices.hasAudio ? '' : 'No microphone found on this device'}
+          className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
             micOn ? 'bg-app-muted text-app' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
           }`}
         >
@@ -410,7 +464,9 @@ export default function MockInterviewRoom() {
         </button>
         <button
           onClick={toggleCam}
-          className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+          disabled={!devices.hasVideo}
+          title={devices.hasVideo ? '' : 'No camera found on this device'}
+          className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
             camOn ? 'bg-app-muted text-app' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
           }`}
         >
