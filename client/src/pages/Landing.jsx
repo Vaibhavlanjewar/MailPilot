@@ -58,6 +58,7 @@ export default function Landing() {
   const navigate = useNavigate();
   const velocityRef = useRef(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [velocityAnimCycle, setVelocityAnimCycle] = useState(0);
 
   function handleUpcomingCardClick(title) {
@@ -146,12 +147,72 @@ export default function Landing() {
             </Link>
             <Link
               to={isAuthenticated ? "/app" : "/register"}
-              className="inline-flex rounded-xl bg-app-gradient px-4 py-2 text-sm font-semibold text-white shadow-app-soft transition hover:-translate-y-0.5 hover:brightness-110"
+              className="inline-flex rounded-xl bg-app-gradient px-3 py-2 text-sm font-semibold text-white shadow-app-soft transition hover:-translate-y-0.5 hover:brightness-110 sm:px-4"
             >
               {isAuthenticated ? "Go to dashboard" : "Start free"}
             </Link>
+
+            {/*
+              Everything above collapses at md, which previously left mobile with
+              no navigation and — worse — no way to log in at all, since the
+              login link is desktop-only. This is the only route back for a
+              returning user on a phone.
+            */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-expanded={menuOpen}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--surface-border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] md:hidden"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                {menuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+                )}
+              </svg>
+            </button>
           </div>
         </div>
+
+        {menuOpen && (
+          <div className="border-t border-[color:var(--surface-border)]/70 px-4 pb-4 pt-2 sm:px-6 md:hidden">
+            <nav className="flex flex-col text-sm font-medium text-[var(--text-secondary)]">
+              {[
+                { href: '#features', label: 'Features' },
+                { href: '#upcoming', label: 'Upcoming' },
+                { href: '#testimonials', label: 'Testimonials' },
+              ].map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg px-2 py-2.5 transition-colors hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+                >
+                  {link.label}
+                </a>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setFeedbackOpen(true);
+                }}
+                className="rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+              >
+                Feedback
+              </button>
+              <Link
+                to={isAuthenticated ? '/app' : '/login'}
+                onClick={() => setMenuOpen(false)}
+                className="mt-2 rounded-xl border border-[color:var(--surface-border)] bg-[var(--surface)] px-4 py-2.5 text-center font-semibold text-[var(--text-primary)]"
+              >
+                {isAuthenticated ? 'Open app' : 'Log in'}
+              </Link>
+            </nav>
+          </div>
+        )}
       </header>
 
       <main>
