@@ -15,6 +15,15 @@ import FeedbackModal from '../FeedbackModal';
  * flow people actually came for.
  */
 const navSections = [
+  /*
+   * Sits above both products because it feeds both — campaigns attach it, and
+   * Career Fit, Roadmap, Interview Prep and Ask My Resume are all grounded in
+   * it. Nothing else works properly until it exists, so it goes first.
+   */
+  {
+    id: 'start',
+    items: [{ to: '/app/resume', label: 'Upload Resume', icon: DocumentTextIcon }],
+  },
   {
     heading: 'Outreach',
     product: true,
@@ -32,11 +41,7 @@ const navSections = [
     heading: 'CareerPilot',
     product: true,
     items: [
-      // The resume grounds Career Fit, Interview Prep, Roadmap and Ask My
-      // Resume, so it leads here even though campaigns can attach it too.
-      { to: '/app/resume', label: 'My Resume', icon: DocumentTextIcon },
-      // Sits with the other two resume-grounded tools rather than down with
-      // Community — all three answer questions about the same document.
+      // Leads the section as the first thing you do with an uploaded resume.
       { to: '/app/resume-chat', label: 'Ask My Resume', icon: ChatQuestionIcon },
       { to: '/app/career-fit', label: 'Career Fit', icon: CompassIcon },
       { to: '/app/roadmap', label: 'Learning Roadmap', icon: RoadmapIcon },
@@ -98,17 +103,19 @@ export default function Sidebar({ open, onClose }) {
         </div>
         <nav className="flex-1 overflow-y-auto p-3 scrollbar-thin">
           {sections.map((section) => (
-            <div key={section.heading} className="mb-5 space-y-0.5">
-              <p
-                className={cn(
-                  'px-3 pb-1 text-[10px] font-bold uppercase tracking-widest',
-                  // The two product areas get the accent; utility groups stay
-                  // muted so the split still reads at a glance.
-                  section.product ? 'text-app-primary' : 'text-app-muted/70',
-                )}
-              >
-                {section.heading}
-              </p>
+            <div key={section.heading || section.id} className="mb-5 space-y-0.5">
+              {section.heading && (
+                <p
+                  className={cn(
+                    'px-3 pb-1 text-[10px] font-bold uppercase tracking-widest',
+                    // The two product areas get the accent; utility groups stay
+                    // muted so the split still reads at a glance.
+                    section.product ? 'text-app-primary' : 'text-app-muted/70',
+                  )}
+                >
+                  {section.heading}
+                </p>
+              )}
               {section.items.map((item) =>
                 item.soon ? (
                   <div
