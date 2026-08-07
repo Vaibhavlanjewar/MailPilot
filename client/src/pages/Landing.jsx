@@ -139,25 +139,21 @@ export default function Landing() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <ThemeToggle className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--surface-border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]" />
+            {/*
+              One auth entry point. "Start free" sat next to this pointing at
+              /register, but the login page already offers sign-up (and Google
+              sign-in creates the account anyway), so two buttons led to the
+              same place and cost the width that pushed everything else off a
+              phone screen. Visible at every size — this is the only way back
+              in for a returning user on mobile.
+            */}
             <Link
               to={isAuthenticated ? "/app" : "/login"}
-              className="hidden rounded-xl border border-[color:var(--surface-border)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm transition hover:shadow md:inline-flex"
-            >
-              {isAuthenticated ? "Open app" : "Log in"}
-            </Link>
-            <Link
-              to={isAuthenticated ? "/app" : "/register"}
               className="inline-flex rounded-xl bg-app-gradient px-3 py-2 text-sm font-semibold text-white shadow-app-soft transition hover:-translate-y-0.5 hover:brightness-110 sm:px-4"
             >
-              {isAuthenticated ? "Go to dashboard" : "Start free"}
+              {isAuthenticated ? "Go to dashboard" : "Log in"}
             </Link>
 
-            {/*
-              Everything above collapses at md, which previously left mobile with
-              no navigation and — worse — no way to log in at all, since the
-              login link is desktop-only. This is the only route back for a
-              returning user on a phone.
-            */}
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
@@ -203,13 +199,6 @@ export default function Landing() {
               >
                 Feedback
               </button>
-              <Link
-                to={isAuthenticated ? '/app' : '/login'}
-                onClick={() => setMenuOpen(false)}
-                className="mt-2 rounded-xl border border-[color:var(--surface-border)] bg-[var(--surface)] px-4 py-2.5 text-center font-semibold text-[var(--text-primary)]"
-              >
-                {isAuthenticated ? 'Open app' : 'Log in'}
-              </Link>
             </nav>
           </div>
         )}
