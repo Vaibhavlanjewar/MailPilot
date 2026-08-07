@@ -5,15 +5,19 @@ import { useAuth } from '../../context/AuthContext';
 import { LIVE_PRACTICE_ROOM_ENABLED } from '../../config/features';
 import FeedbackModal from '../FeedbackModal';
 
-/** Grouped by job-to-be-done: sending outreach vs. preparing for roles. */
+/**
+ * Two products in one app, so the nav says so rather than presenting a flat
+ * list of every feature. Outreach is the send-cold-email side; CareerPilot is
+ * everything for getting ready for the roles that outreach lands.
+ *
+ * Within each: the daily action first, supporting inputs next, results after
+ * that, and configure-once screens last — so a setup page never sits above the
+ * flow people actually came for.
+ */
 const navSections = [
-  /*
-   * Daily actions first, results after them, and the configure-once items moved
-   * out to their own group — they were previously interleaved, which put
-   * setup screens above the campaign flow people actually come here for.
-   */
   {
     heading: 'Outreach',
+    caption: 'Reach recruiters',
     items: [
       { to: '/app', label: 'Dashboard', end: true, icon: LayoutIcon },
       { to: '/app/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
@@ -21,26 +25,20 @@ const navSections = [
       { to: '/app/templates', label: 'Email Templates', icon: DocumentIcon },
       { to: '/app/email-tracking', label: 'Delivery & Opens', icon: TrackingIcon },
       { to: '/app/analytics', label: 'Analytics', icon: ChartIcon },
+      { to: '/app/settings?section=gmail', label: 'Email Sending Setup', icon: CogIcon },
     ],
   },
-  /*
-   * Ordered as the journey actually runs — work out the target, close the gaps,
-   * rehearse, then apply — rather than by when each feature happened to be
-   * built. Support tools that get used on and off sit at the end so the main
-   * path stays on top.
-   */
   {
-    heading: 'Prepare',
+    heading: 'CareerPilot',
+    caption: 'Get ready for the role',
     items: [
+      // The resume grounds Career Fit, Interview Prep, Roadmap and Ask My
+      // Resume, so it leads here even though campaigns can attach it too.
+      { to: '/app/resume', label: 'My Resume', icon: DocumentTextIcon },
       { to: '/app/career-fit', label: 'Career Fit', icon: CompassIcon },
       { to: '/app/roadmap', label: 'Learning Roadmap', icon: RoadmapIcon },
       { to: '/app/interview-prep', label: 'Interview Prep', icon: AcademicCapIcon },
       { to: '/app/mock-interview', label: 'Live Practice Room', icon: VideoIcon, soon: !LIVE_PRACTICE_ROOM_ENABLED },
-    ],
-  },
-  {
-    heading: 'Apply & connect',
-    items: [
       { to: '/app/jobs', label: 'Job Board', icon: BriefcaseIcon },
       { to: '/app/resume-chat', label: 'Ask My Resume', icon: ChatQuestionIcon },
       { to: '/app/community', label: 'Community', icon: ChatBubbleIcon },
@@ -48,15 +46,6 @@ const navSections = [
     ],
   },
 ];
-
-/** Configure once, then rarely revisit — but both gate real functionality. */
-const setupSection = {
-  heading: 'Setup',
-  items: [
-    { to: '/app/resume', label: 'My Resume', icon: DocumentTextIcon },
-    { to: '/app/settings?section=gmail', label: 'Email Sending Setup', icon: CogIcon },
-  ],
-};
 
 const accountSection = {
   heading: 'Account',
@@ -78,8 +67,8 @@ export default function Sidebar({ open, onClose }) {
   const { isRecruiter } = useAuth();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const sections = isRecruiter
-    ? [...navSections, recruiterSection, setupSection, accountSection]
-    : [...navSections, setupSection, accountSection];
+    ? [...navSections, recruiterSection, accountSection]
+    : [...navSections, accountSection];
 
   return (
     <>
@@ -107,10 +96,24 @@ export default function Sidebar({ open, onClose }) {
         </div>
         <nav className="flex-1 overflow-y-auto p-3 scrollbar-thin">
           {sections.map((section) => (
-            <div key={section.heading} className="mb-4 space-y-0.5">
-              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-app-muted/70">
-                {section.heading}
-              </p>
+            <div key={section.heading} className="mb-5 space-y-0.5">
+              <div className="px-3 pb-1.5">
+                <p
+                  className={cn(
+                    'text-[10px] font-bold uppercase tracking-widest',
+                    // The two product areas get the accent; utility groups stay muted
+                    // so the split reads at a glance.
+                    section.caption ? 'text-app-primary' : 'text-app-muted/70',
+                  )}
+                >
+                  {section.heading}
+                </p>
+                {section.caption && (
+                  <p className="mt-0.5 text-[10px] leading-tight text-app-muted/70">
+                    {section.caption}
+                  </p>
+                )}
+              </div>
               {section.items.map((item) =>
                 item.soon ? (
                   <div
