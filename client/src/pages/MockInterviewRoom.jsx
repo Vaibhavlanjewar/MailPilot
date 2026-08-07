@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth } from '../services/firebase';
 import api from '../services/api';
+import AudioLevelMeter from '../components/AudioLevelMeter';
 
 /**
  * Used only if the server's /ice-servers call fails. TURN credentials are
@@ -73,6 +74,10 @@ export default function MockInterviewRoom() {
   const [needsUnmute, setNeedsUnmute] = useState(false);
   const [devices, setDevices] = useState({ hasVideo: true, hasAudio: true, mics: 0, cams: 0 });
   const [remoteHasAudio, setRemoteHasAudio] = useState(null); // null = unknown yet
+  // Mirrored into state (not just refs) so the level meters re-render with them.
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [showAudioCheck, setShowAudioCheck] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -83,6 +88,7 @@ export default function MockInterviewRoom() {
   const connectTimeoutRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
   const iceServersRef = useRef(FALLBACK_ICE_SERVERS);
+  const remoteStreamRef = useRef(null);
   // StrictMode double-invokes the mount effect in dev, and getUserMedia/WS
   // setup isn't naturally cancellable — without this guard both invocations
   // race to open their own camera stream + signaling connection as the same
@@ -111,11 +117,28 @@ export default function MockInterviewRoom() {
     pc.ontrack = (e) => {
       const video = remoteVideoRef.current;
       if (!video) return;
-      const [remoteStream] = e.streams;
-      video.srcObject = remoteStream;
-      // Tells the two failure modes apart: they aren't sending audio at all,
-      // versus they are and it isn't coming out of our speakers.
-      setRemoteHasAudio(remoteStream.getAudioTracks().length > 0);
+
+      // ontrack fires once per track. Assigning e.streams[0] each time looks
+      // equivalent but isn't: the audio track usually arrives *after* the video
+      // one, and re-assigning srcObject to the same MediaStream object is a
+      // no-op in some browsers, so the element keeps playing the video-only
+      // snapshot it first latched onto and stays permanently silent.
+      // Owning the stream and re-attaching on every track removes the guesswork.
+      let assembled = remoteStreamRef.current;
+      if (!assembled) {
+        assembled = new MediaStream();
+        remoteStreamRef.current = assembled;
+      }
+      if (!assembled.getTracks().includes(e.track)) {
+        assembled.addTrack(e.track);
+      }
+
+      video.srcObject = null;
+      video.srcObject = assembled;
+      video.volume = 1;
+      setRemoteStream(assembled);
+      setRemoteHasAudio(assembled.getAudioTracks().length > 0);
+
       // A previous autoplay fallback may have left the element muted; without
       // clearing it here a reconnect would stay permanently silent.
       video.muted = false;
@@ -145,6 +168,9 @@ export default function MockInterviewRoom() {
     localStreamRef.current?.getTracks().forEach((track) => pc.addTrack(track, localStreamRef.current));
     pcRef.current = pc;
     pendingCandidatesRef.current = [];
+    // Each new connection brings fresh tracks; carrying the old stream over
+    // would leave dead tracks in it and mis-report what the peer is sending.
+    remoteStreamRef.current = null;
     return pc;
   }, []);
 
@@ -218,6 +244,7 @@ export default function MockInterviewRoom() {
       setCamOn(hasVideo);
       setMicOn(hasAudio);
       localStreamRef.current = stream;
+      setLocalStream(stream);
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
       const token = await auth.currentUser.getIdToken();
@@ -319,6 +346,9 @@ export default function MockInterviewRoom() {
           setNeedsUnmute(false);
           clearTimeout(connectTimeoutRef.current);
           if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+          setRemoteStream(null);
+          setRemoteHasAudio(null);
+          remoteStreamRef.current = null;
           pcRef.current?.close();
           pcRef.current = null;
           pendingCandidatesRef.current = [];
@@ -489,6 +519,65 @@ export default function MockInterviewRoom() {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-surface-border bg-app-surface p-4">
+        <button
+          type="button"
+          onClick={() => setShowAudioCheck((v) => !v)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="text-sm font-semibold text-app">Audio check</span>
+          <span className="text-xs text-app-muted">{showAudioCheck ? 'Hide' : 'No sound? Open this'}</span>
+        </button>
+
+        {showAudioCheck && (
+          <div className="mt-4 space-y-3">
+            <AudioLevelMeter
+              stream={localStream}
+              label="Your mic"
+              hint={micOn ? 'say something' : 'muted by you'}
+            />
+            <AudioLevelMeter
+              stream={remoteStream}
+              label={peerName ? `${peerName}'s mic` : 'Their mic'}
+              hint="nothing incoming"
+            />
+
+            <ul className="space-y-1.5 border-t border-surface-border pt-3 text-xs text-app-muted">
+              <li>
+                <strong className="text-app">Your bar moves, theirs doesn't</strong> — their mic
+                isn't sending. They should open this panel on their side.
+              </li>
+              <li>
+                <strong className="text-app">Their bar moves but you hear nothing</strong> — the
+                browser is blocking sound. Use the button below, and check your system volume and
+                output device.
+              </li>
+              <li>
+                <strong className="text-app">Your bar doesn't move</strong> — your mic isn't being
+                captured. Check the mic permission in the address bar, and close any other app
+                holding it (Zoom, Teams, Meet).
+              </li>
+            </ul>
+
+            <button
+              type="button"
+              onClick={() => {
+                const video = remoteVideoRef.current;
+                if (video) {
+                  video.muted = false;
+                  video.volume = 1;
+                  video.play().catch(() => {});
+                }
+                setNeedsUnmute(false);
+              }}
+              className="rounded-lg bg-app-gradient px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90"
+            >
+              Force unmute their audio
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-center gap-3">
