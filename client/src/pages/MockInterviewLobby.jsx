@@ -114,6 +114,16 @@ export default function MockInterviewLobby() {
     }
   }
 
+  async function removeRoom(code) {
+    try {
+      await api.delete(`/mock-interview/rooms/${code}`);
+      toast.success('Room removed.');
+      loadMeetings();
+    } catch (err) {
+      toast.error(err.message || 'Could not remove the room.');
+    }
+  }
+
   async function copyLink(url) {
     try {
       await navigator.clipboard.writeText(url);
@@ -271,12 +281,20 @@ export default function MockInterviewLobby() {
                     Copy link
                   </button>
                   {m.isOwner && (
-                    <button
-                      onClick={() => cancelMeeting(m.code)}
-                      className="rounded-lg border border-surface-border px-4 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-400"
-                    >
-                      Cancel
-                    </button>
+                    <>
+                      <button
+                        onClick={() => cancelMeeting(m.code)}
+                        className="rounded-lg border border-surface-border px-4 py-1.5 text-xs font-medium text-amber-600 transition hover:bg-amber-500/10 dark:text-amber-400"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => removeRoom(m.code)}
+                        className="rounded-lg border border-surface-border px-4 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-400"
+                      >
+                        Remove
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -288,18 +306,41 @@ export default function MockInterviewLobby() {
       {instant.length > 0 && (
         <div className="rounded-2xl border border-surface-border bg-app-surface p-5 shadow-sm">
           <h2 className="text-sm font-bold uppercase tracking-wider text-app-muted">Open rooms</h2>
+          <p className="mt-1 text-xs text-app-muted">
+            Rooms clear themselves shortly after everyone leaves. Remove one here to clear it now.
+          </p>
           <div className="mt-3 space-y-2">
             {instant.map((r) => (
-              <button
+              <div
                 key={r.code}
-                onClick={() => navigate(`/app/mock-interview/${r.code}`)}
-                className="flex w-full items-center justify-between rounded-xl border border-surface-border bg-default-bg p-3 text-left transition hover:border-primary"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-surface-border bg-default-bg p-3"
               >
-                <p className="font-mono text-xs text-app">{r.code}</p>
-                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400">
-                  {r.status}
-                </span>
-              </button>
+                <button
+                  onClick={() => navigate(`/app/mock-interview/${r.code}`)}
+                  className="flex flex-1 items-center gap-3 text-left"
+                >
+                  <span className="font-mono text-xs text-app">{r.code}</span>
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400">
+                    {r.status}
+                  </span>
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => copyLink(r.joinUrl)}
+                    className="rounded-lg border border-surface-border px-3 py-1.5 text-xs font-medium text-app-muted transition hover:text-app"
+                  >
+                    Copy link
+                  </button>
+                  {r.isOwner && (
+                    <button
+                      onClick={() => removeRoom(r.code)}
+                      className="rounded-lg border border-surface-border px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-400"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         </div>

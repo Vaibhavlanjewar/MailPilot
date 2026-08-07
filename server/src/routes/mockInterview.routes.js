@@ -147,6 +147,24 @@ router.get('/meetings', async (req, res, next) => {
   }
 });
 
+/** Removes a room outright — used for finished or abandoned practice rooms. */
+router.delete('/rooms/:code', async (req, res, next) => {
+  try {
+    const room = await MockInterviewRoom.findOne({ code: req.params.code });
+    if (!room) throw new AppError('This room does not exist or has already been removed.', 404);
+    if (String(room.createdBy) !== String(req.userId)) {
+      throw new AppError('Only the host can remove this room.', 403);
+    }
+
+    await cancelMeetingReminder(room.code);
+    await MockInterviewRoom.deleteOne({ _id: room._id });
+
+    res.json({ success: true, message: 'Room removed' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.patch('/meetings/:code/cancel', async (req, res, next) => {
   try {
     const room = await MockInterviewRoom.findOne({ code: req.params.code });

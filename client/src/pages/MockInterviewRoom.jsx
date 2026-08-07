@@ -24,25 +24,48 @@ const CONNECT_TIMEOUT_MS = 20_000;
  *
  * @returns {Promise<{ stream: MediaStream, hasVideo: boolean, hasAudio: boolean }>}
  */
+/**
+ * Mobile browsers frequently reject a combined video+audio request that they'd
+ * grant individually — another app holding the mic, or a device-specific
+ * constraint failure. Falling straight back to video-only there would join the
+ * call permanently mute, so audio is retried on its own before giving up, and
+ * the reason for each failure is kept for the audio-check panel.
+ */
 async function getBestAvailableStream() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    return { stream, hasVideo: true, hasAudio: true };
-  } catch (err) {
-    // A denied *permission* is the user's decision and shouldn't be retried as
-    // something else; only a missing device is worth falling back for.
-    if (err.name !== 'NotFoundError' && err.name !== 'OverconstrainedError') throw err;
-  }
+  const reasons = [];
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-    return { stream, hasVideo: false, hasAudio: true };
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    return { stream, hasVideo: true, hasAudio: true, audioError: '' };
   } catch (err) {
-    if (err.name !== 'NotFoundError' && err.name !== 'OverconstrainedError') throw err;
+    // A denied *permission* is the user's decision and shouldn't be retried as
+    // something else; only a missing/unusable device is worth falling back for.
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') throw err;
+    reasons.push(`video+audio: ${err.name}`);
+  }
+
+  // Audio and video separately, then combined into one stream — this is what
+  // rescues the common mobile case above.
+  try {
+    const audioOnly = await navigator.mediaDevices.getUserMedia({ audio: true });
+    try {
+      const videoOnly = await navigator.mediaDevices.getUserMedia({ video: true });
+      const combined = new MediaStream([
+        ...videoOnly.getVideoTracks(),
+        ...audioOnly.getAudioTracks(),
+      ]);
+      return { stream: combined, hasVideo: true, hasAudio: true, audioError: '' };
+    } catch (err) {
+      reasons.push(`video: ${err.name}`);
+      return { stream: audioOnly, hasVideo: false, hasAudio: true, audioError: '' };
+    }
+  } catch (err) {
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') throw err;
+    reasons.push(`audio: ${err.name}`);
   }
 
   const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-  return { stream, hasVideo: true, hasAudio: false };
+  return { stream, hasVideo: true, hasAudio: false, audioError: reasons.join(' · ') };
 }
 
 /**

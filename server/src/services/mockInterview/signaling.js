@@ -16,6 +16,52 @@ import { logger } from '../../utils/logger.js';
 /** @type {Map<string, Array<{ ws: import('ws').WebSocket, userId: string, name: string }>>} */
 const rooms = new Map();
 
+/**
+ * Rooms that emptied out and are pending an "ended" mark.
+ *
+ * Ending immediately on the last disconnect would break the most common
+ * interruption there is — a refresh or a brief network drop closes the socket
+ * with nobody else present, and the rejoin would then be rejected against a
+ * room that no longer exists. The grace window lets that reconnect win.
+ *
+ * @type {Map<string, NodeJS.Timeout>}
+ */
+const pendingEnd = new Map();
+const END_GRACE_MS = 90_000;
+
+function cancelPendingEnd(roomCode) {
+  const timer = pendingEnd.get(roomCode);
+  if (timer) {
+    clearTimeout(timer);
+    pendingEnd.delete(roomCode);
+  }
+}
+
+/**
+ * Only rooms that actually got going are ended this way. A room nobody ever
+ * joined stays listed so the host can still share its link, and expires on its
+ * own via the TTL index.
+ */
+function scheduleRoomEnd(roomCode) {
+  cancelPendingEnd(roomCode);
+  const timer = setTimeout(async () => {
+    pendingEnd.delete(roomCode);
+    if (rooms.get(roomCode)?.length) return; // someone came back
+    try {
+      await MockInterviewRoom.updateOne(
+        { code: roomCode, status: 'active' },
+        { $set: { status: 'ended', endedAt: new Date() } },
+      );
+      logger.debug('Mock interview room ended after grace period', { roomCode });
+    } catch (err) {
+      logger.warn('Could not mark room ended', { roomCode, error: err.message });
+    }
+  }, END_GRACE_MS);
+  // Don't hold the event loop open on shutdown just for a cleanup timer.
+  timer.unref?.();
+  pendingEnd.set(roomCode, timer);
+}
+
 function send(ws, payload) {
   if (ws.readyState === ws.OPEN) {
     ws.send(JSON.stringify(payload));
@@ -63,6 +109,9 @@ async function handleConnection(ws, req) {
     send(ws, { type: 'error', message: 'This room already has two participants.' });
     return ws.close();
   }
+
+  // A rejoin inside the grace window means the room is still in use.
+  cancelPendingEnd(roomCode);
 
   const self = { ws, userId: identity.userId, name: identity.name };
   const otherPeers = peers.filter((p) => p.userId !== identity.userId);
@@ -139,6 +188,9 @@ async function handleConnection(ws, req) {
       send(remaining[0].ws, { type: 'peer-left' });
     } else {
       rooms.delete(roomCode);
+      // Everyone's gone — start the countdown to marking this finished so it
+      // stops showing as an open room.
+      scheduleRoomEnd(roomCode);
     }
     logger.debug('Mock interview peer disconnected', { roomCode, userId: identity.userId });
   });
