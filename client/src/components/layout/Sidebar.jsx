@@ -17,7 +17,7 @@ import FeedbackModal from '../FeedbackModal';
 const navSections = [
   {
     heading: 'Outreach',
-    caption: 'Reach recruiters',
+    product: true,
     items: [
       { to: '/app', label: 'Dashboard', end: true, icon: LayoutIcon },
       { to: '/app/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
@@ -30,7 +30,7 @@ const navSections = [
   },
   {
     heading: 'CareerPilot',
-    caption: 'Get ready for the role',
+    product: true,
     items: [
       // The resume grounds Career Fit, Interview Prep, Roadmap and Ask My
       // Resume, so it leads here even though campaigns can attach it too.
@@ -97,23 +97,16 @@ export default function Sidebar({ open, onClose }) {
         <nav className="flex-1 overflow-y-auto p-3 scrollbar-thin">
           {sections.map((section) => (
             <div key={section.heading} className="mb-5 space-y-0.5">
-              <div className="px-3 pb-1.5">
-                <p
-                  className={cn(
-                    'text-[10px] font-bold uppercase tracking-widest',
-                    // The two product areas get the accent; utility groups stay muted
-                    // so the split reads at a glance.
-                    section.caption ? 'text-app-primary' : 'text-app-muted/70',
-                  )}
-                >
-                  {section.heading}
-                </p>
-                {section.caption && (
-                  <p className="mt-0.5 text-[10px] leading-tight text-app-muted/70">
-                    {section.caption}
-                  </p>
+              <p
+                className={cn(
+                  'px-3 pb-1 text-[10px] font-bold uppercase tracking-widest',
+                  // The two product areas get the accent; utility groups stay
+                  // muted so the split still reads at a glance.
+                  section.product ? 'text-app-primary' : 'text-app-muted/70',
                 )}
-              </div>
+              >
+                {section.heading}
+              </p>
               {section.items.map((item) =>
                 item.soon ? (
                   <div
