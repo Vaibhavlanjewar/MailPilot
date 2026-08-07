@@ -17,6 +17,32 @@ const FALLBACK_ICE_SERVERS = [
 
 const CONNECT_TIMEOUT_MS = 20_000;
 
+/** Raw state names ("waiting", "checking") read as errors to a candidate mid-interview. */
+const STATUS_LABEL = {
+  checking: 'Preparing…',
+  scheduled: 'Not started',
+  waiting: 'Waiting for the other person',
+  connecting: 'Connecting…',
+  connected: 'Live',
+  ended: 'Ended',
+  error: 'Problem',
+};
+
+const STATUS_TONE = {
+  connected: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  connecting: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  waiting: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  error: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+};
+
+function formatDuration(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
 /**
  * Plenty of desktops have a mic but no webcam. Asking for both at once fails
  * outright in that case (NotFoundError), which would block an audio-only
@@ -101,6 +127,10 @@ export default function MockInterviewRoom() {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [showAudioCheck, setShowAudioCheck] = useState(false);
+  const [connectedAt, setConnectedAt] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const stageRef = useRef(null);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -180,6 +210,9 @@ export default function MockInterviewRoom() {
       if (pc.connectionState === 'connected') {
         clearTimeout(connectTimeoutRef.current);
         setStatus('connected');
+        // Keep the original start time across a mid-call renegotiation, so the
+        // timer reflects the session rather than the current ICE connection.
+        setConnectedAt((prev) => prev ?? Date.now());
       } else if (['failed', 'disconnected'].includes(pc.connectionState)) {
         setStatus('error');
         setErrorMessage(
@@ -227,7 +260,9 @@ export default function MockInterviewRoom() {
         return;
       }
 
-      if (room.data.room.isFull && !room.data.room.isOwner) {
+      // isFull already excludes the caller if they've been in this room before,
+      // so a returning participant is never turned away by their own presence.
+      if (room.data.room.isFull) {
         setStatus('error');
         setErrorMessage('This room already has two participants.');
         return;
@@ -410,6 +445,25 @@ export default function MockInterviewRoom() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
+  // Ticks only while a call is up. Derived from a timestamp rather than an
+  // incrementing counter so a backgrounded tab (where timers are throttled)
+  // still shows the true duration on return.
+  useEffect(() => {
+    if (!connectedAt) return undefined;
+    const tick = () => setElapsed(Math.floor((Date.now() - connectedAt) / 1000));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [connectedAt]);
+
+  // The browser can exit fullscreen without going through our button (Esc,
+  // gesture, OS chrome), so mirror the real state instead of assuming.
+  useEffect(() => {
+    const sync = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
   // While the join window hasn't opened yet, re-check periodically so the
   // page moves itself into the call the moment it's allowed to, instead of
   // requiring a manual reload at exactly the right second.
@@ -435,6 +489,22 @@ export default function MockInterviewRoom() {
     }
   }
 
+  async function toggleFullscreen() {
+    const el = stageRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        // iOS Safari doesn't implement the element Fullscreen API; the caller
+        // just stays windowed rather than throwing at the user.
+        await (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.());
+      }
+    } catch {
+      toast.info('Your browser blocked fullscreen here.');
+    }
+  }
+
   function leaveRoom() {
     cleanup();
     navigate('/app/mock-interview');
@@ -448,12 +518,22 @@ export default function MockInterviewRoom() {
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-lg font-bold text-app">Live Practice Room</h1>
-          <p className="text-xs text-app-muted">
-            Status: <span className="font-semibold text-app">{status}</span>
-            {peerName && <> · with {peerName}</>}
-          </p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-semibold ${STATUS_TONE[status] || 'bg-app-muted text-app-muted'}`}
+            >
+              <i className={`h-1.5 w-1.5 rounded-full ${status === 'connected' ? 'bg-emerald-500' : 'bg-current opacity-60'}`} />
+              {STATUS_LABEL[status] || status}
+            </span>
+            {peerName && <span className="text-app-muted">with {peerName}</span>}
+            {connectedAt && (
+              <span className="font-mono tabular-nums text-app-muted" title="Time on this call">
+                {formatDuration(elapsed)}
+              </span>
+            )}
+          </div>
         </div>
         <button onClick={copyLink} className="rounded-xl bg-app-muted px-3 py-2 text-xs font-semibold text-app hover:opacity-80">
           Copy invite link
@@ -511,21 +591,67 @@ export default function MockInterviewRoom() {
 
       {status !== 'scheduled' && (
       <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-black">
-          <video ref={localVideoRef} autoPlay playsInline muted className="aspect-video w-full object-cover" />
-          {!devices.hasVideo && (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-white/60">
-              Audio only — no camera on this device
-            </div>
-          )}
-          <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-[10px] text-white">You</span>
-        </div>
-        <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-black">
-          <video ref={remoteVideoRef} autoPlay playsInline className="aspect-video w-full object-cover" />
-          <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-[10px] text-white">
-            {peerName || 'Waiting…'}
-          </span>
+      {/*
+        In fullscreen the stage becomes the whole screen, so it carries its own
+        black background and centres itself — otherwise the browser letterboxes
+        a page-width grid against default white.
+        On phones in landscape the two tiles sit side by side; portrait stacks
+        them, which is why the breakpoint is orientation-aware rather than
+        width-only.
+      */}
+      <div
+        ref={stageRef}
+        className={
+          isFullscreen
+            ? 'flex h-screen w-screen flex-col justify-center gap-2 bg-black p-2'
+            : 'space-y-4'
+        }
+      >
+        <div
+          className={
+            isFullscreen
+              ? 'grid min-h-0 flex-1 grid-cols-1 gap-2 landscape:grid-cols-2'
+              : 'grid grid-cols-1 gap-4 landscape:grid-cols-2 md:grid-cols-2'
+          }
+        >
+          <div className="relative min-h-0 overflow-hidden rounded-2xl border border-surface-border bg-black">
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className={
+                isFullscreen
+                  ? 'h-full w-full object-contain'
+                  : 'aspect-video w-full object-cover'
+              }
+            />
+            {!devices.hasVideo && (
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-white/60">
+                Audio only — no camera on this device
+              </div>
+            )}
+            <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-[10px] text-white">You</span>
+          </div>
+          <div className="relative min-h-0 overflow-hidden rounded-2xl border border-surface-border bg-black">
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className={
+                isFullscreen
+                  ? 'h-full w-full object-contain'
+                  : 'aspect-video w-full object-cover'
+              }
+            />
+            <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-[10px] text-white">
+              {peerName || 'Waiting…'}
+            </span>
+            {status === 'connected' && (
+              <span className="absolute right-2 top-2 rounded bg-black/60 px-2 py-0.5 font-mono text-[10px] tabular-nums text-white">
+                {formatDuration(elapsed)}
+              </span>
+            )}
           {needsUnmute && (
             <button
               onClick={() => {
@@ -544,7 +670,8 @@ export default function MockInterviewRoom() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-surface-border bg-app-surface p-4">
+      {/* Diagnostics would eat the video area when the stage is the whole screen. */}
+      <div className={`rounded-xl border border-surface-border bg-app-surface p-4 ${isFullscreen ? 'hidden' : ''}`}>
         <button
           type="button"
           onClick={() => setShowAudioCheck((v) => !v)}
@@ -603,7 +730,8 @@ export default function MockInterviewRoom() {
         )}
       </div>
 
-      <div className="flex justify-center gap-3">
+      {/* Kept inside the stage so the controls stay reachable in fullscreen. */}
+      <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
         <button
           onClick={toggleMic}
           disabled={!devices.hasAudio}
@@ -625,11 +753,18 @@ export default function MockInterviewRoom() {
           {camOn ? 'Stop video' : 'Start video'}
         </button>
         <button
+          onClick={toggleFullscreen}
+          className="rounded-xl bg-app-muted px-4 py-2.5 text-sm font-semibold text-app transition hover:opacity-80"
+        >
+          {isFullscreen ? 'Exit full screen' : 'Full screen'}
+        </button>
+        <button
           onClick={leaveRoom}
           className="rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
         >
           Leave
         </button>
+      </div>
       </div>
       </>
       )}

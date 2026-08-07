@@ -192,12 +192,20 @@ router.get('/rooms/:code', async (req, res, next) => {
       throw new AppError('This meeting was cancelled by the host.', 410);
     }
 
+    // Someone already recorded in this room is returning to it, not competing
+    // for a seat — reporting "full" to them blocks reconnects after a refresh
+    // or a dropped connection, which is the most common way back in.
+    const alreadyIn = room.participants.some(
+      (p) => String(p.userId) === String(req.userId),
+    );
+
     res.json({
       success: true,
       room: {
         ...serializeRoom(room, req.userId),
         participantCount: room.participants.length,
-        isFull: room.participants.length >= 2,
+        isFull: !alreadyIn && room.participants.length >= 2,
+        alreadyJoined: alreadyIn,
       },
     });
   } catch (err) {

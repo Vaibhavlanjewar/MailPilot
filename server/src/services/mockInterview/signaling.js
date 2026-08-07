@@ -29,6 +29,31 @@ const rooms = new Map();
 const pendingEnd = new Map();
 const END_GRACE_MS = 90_000;
 
+/**
+ * Records a participant at most once per user.
+ *
+ * This used to `$push` on every socket connection, so a refresh, a flaky
+ * network, or React StrictMode's double-invoke appended the same person again.
+ * `participants.length >= 2` is what drives "room is full", so a single user
+ * reconnecting once was enough to lock the room — including against themselves
+ * and the person they invited. The `$ne` guard makes the insert idempotent
+ * without a read-then-write race.
+ */
+async function recordParticipant(roomCode, identity) {
+  await MockInterviewRoom.updateOne(
+    { code: roomCode, 'participants.userId': { $ne: identity.userId } },
+    {
+      $push: {
+        participants: {
+          userId: identity.userId,
+          name: identity.name,
+          joinedAt: new Date(),
+        },
+      },
+    },
+  );
+}
+
 function cancelPendingEnd(roomCode) {
   const timer = pendingEnd.get(roomCode);
   if (timer) {
@@ -105,7 +130,14 @@ async function handleConnection(ws, req) {
   }
 
   const peers = rooms.get(roomCode) || [];
-  if (peers.length >= 2 && !peers.some((p) => p.userId === identity.userId)) {
+  // A previously-recorded participant is reconnecting, not a third person
+  // arriving — they keep their seat even if two sockets are somehow still
+  // registered, since one of those is almost certainly their own stale one.
+  const wasHere = room.participants.some(
+    (p) => String(p.userId) === String(identity.userId),
+  );
+  const alreadyConnected = peers.some((p) => p.userId === identity.userId);
+  if (peers.length >= 2 && !alreadyConnected && !wasHere) {
     send(ws, { type: 'error', message: 'This room already has two participants.' });
     return ws.close();
   }
@@ -159,18 +191,10 @@ async function handleConnection(ws, req) {
       youAreInitiator: String(room.createdBy) === otherPeer.userId,
     });
     send(ws, { type: 'peer-joined', peerName: otherPeer.name, youAreInitiator: isInitiator });
-    await MockInterviewRoom.updateOne(
-      { code: roomCode },
-      {
-        $set: { status: 'active' },
-        $push: { participants: { userId: identity.userId, name: identity.name, joinedAt: new Date() } },
-      },
-    );
+    await MockInterviewRoom.updateOne({ code: roomCode }, { $set: { status: 'active' } });
+    await recordParticipant(roomCode, identity);
   } else {
-    await MockInterviewRoom.updateOne(
-      { code: roomCode },
-      { $push: { participants: { userId: identity.userId, name: identity.name, joinedAt: new Date() } } },
-    );
+    await recordParticipant(roomCode, identity);
   }
 
   ws.on('close', () => {
