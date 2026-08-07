@@ -7,33 +7,56 @@ import FeedbackModal from '../FeedbackModal';
 
 /** Grouped by job-to-be-done: sending outreach vs. preparing for roles. */
 const navSections = [
+  /*
+   * Daily actions first, results after them, and the configure-once items moved
+   * out to their own group — they were previously interleaved, which put
+   * setup screens above the campaign flow people actually come here for.
+   */
   {
     heading: 'Outreach',
     items: [
-      { to: '/app/resume', label: 'My Resume', icon: DocumentTextIcon },
       { to: '/app', label: 'Dashboard', end: true, icon: LayoutIcon },
       { to: '/app/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
       { to: '/app/contacts', label: 'Recipients', icon: UsersIcon },
       { to: '/app/templates', label: 'Email Templates', icon: DocumentIcon },
       { to: '/app/email-tracking', label: 'Delivery & Opens', icon: TrackingIcon },
       { to: '/app/analytics', label: 'Analytics', icon: ChartIcon },
-      { to: '/app/settings?section=gmail', label: 'Email Sending Setup', icon: CogIcon },
+    ],
+  },
+  /*
+   * Ordered as the journey actually runs — work out the target, close the gaps,
+   * rehearse, then apply — rather than by when each feature happened to be
+   * built. Support tools that get used on and off sit at the end so the main
+   * path stays on top.
+   */
+  {
+    heading: 'Prepare',
+    items: [
+      { to: '/app/career-fit', label: 'Career Fit', icon: CompassIcon },
+      { to: '/app/roadmap', label: 'Learning Roadmap', icon: RoadmapIcon },
+      { to: '/app/interview-prep', label: 'Interview Prep', icon: AcademicCapIcon },
+      { to: '/app/mock-interview', label: 'Live Practice Room', icon: VideoIcon, soon: !LIVE_PRACTICE_ROOM_ENABLED },
     ],
   },
   {
-    heading: 'Career',
+    heading: 'Apply & connect',
     items: [
-      { to: '/app/resume-chat', label: 'Ask My Resume', icon: ChatQuestionIcon },
-      { to: '/app/career-fit', label: 'Career Fit', icon: CompassIcon },
-      { to: '/app/interview-prep', label: 'Interview Prep', icon: AcademicCapIcon },
-      { to: '/app/mock-interview', label: 'Live Practice Room', icon: VideoIcon, soon: !LIVE_PRACTICE_ROOM_ENABLED },
-      { to: '/app/roadmap', label: 'Learning Roadmap', icon: RoadmapIcon },
       { to: '/app/jobs', label: 'Job Board', icon: BriefcaseIcon },
+      { to: '/app/resume-chat', label: 'Ask My Resume', icon: ChatQuestionIcon },
       { to: '/app/community', label: 'Community', icon: ChatBubbleIcon },
       { to: '/app/mind-games', label: 'Mind Games', icon: PuzzleIcon },
     ],
   },
 ];
+
+/** Configure once, then rarely revisit — but both gate real functionality. */
+const setupSection = {
+  heading: 'Setup',
+  items: [
+    { to: '/app/resume', label: 'My Resume', icon: DocumentTextIcon },
+    { to: '/app/settings?section=gmail', label: 'Email Sending Setup', icon: CogIcon },
+  ],
+};
 
 const accountSection = {
   heading: 'Account',
@@ -55,8 +78,8 @@ export default function Sidebar({ open, onClose }) {
   const { isRecruiter } = useAuth();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const sections = isRecruiter
-    ? [...navSections, recruiterSection, accountSection]
-    : [...navSections, accountSection];
+    ? [...navSections, recruiterSection, setupSection, accountSection]
+    : [...navSections, setupSection, accountSection];
 
   return (
     <>

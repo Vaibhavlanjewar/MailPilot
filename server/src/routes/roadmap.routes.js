@@ -176,6 +176,134 @@ router.patch('/:id/steps/:stepId', async (req, res, next) => {
   }
 });
 
+const EXPLAIN_PROMPT = `
+You are a senior engineer teaching one specific topic to someone working through a learning
+roadmap. Explain the topic itself — do not restate the roadmap or give generic study advice.
+
+Be concrete and technical. Name real tools, real APIs, real commands. Prefer a short worked
+example over an abstract description. Assume the learner is competent but new to this topic.
+
+Respond with strictly this JSON and nothing else:
+{
+  "explanation": "3-5 sentences on what this is and why it matters. Plain prose, no markdown.",
+  "keyPoints": ["A specific fact or rule worth remembering", "Another"],
+  "subtopics": [
+    { "title": "A narrower thing inside this topic", "detail": "1-2 sentences explaining it." }
+  ],
+  "example": "A short concrete example — a snippet, command, or worked scenario. Plain text.",
+  "pitfalls": ["A specific mistake beginners make here"],
+  "interviewAngle": "How this topic typically shows up in interviews, in 1-2 sentences."
+}
+
+Give 3-6 keyPoints, 3-5 subtopics, and 2-4 pitfalls.
+`.trim();
+
+/** Detail panel for a single topic inside a step — the roadmap's drill-down. */
+router.post('/:id/explain', generateLimiter, async (req, res, next) => {
+  try {
+    const { topic, stepTitle = '' } = req.body;
+    if (!topic?.trim()) throw new AppError('Pick a topic to explain.', 422);
+    if (topic.length > 200) throw new AppError('Topic is too long.', 422);
+
+    const roadmap = await Roadmap.findOne({ _id: req.params.id, userId: req.userId }).lean();
+    if (!roadmap) throw new AppError('Roadmap not found.', 404);
+
+    const userPrompt = `
+[LEARNER'S GOAL]
+${roadmap.goal}
+
+[ROADMAP STEP]
+${stepTitle || 'unspecified'}
+
+[TOPIC TO EXPLAIN]
+${topic.trim()}
+`.trim();
+
+    const { data, provider } = await generateStructuredAi(EXPLAIN_PROMPT, userPrompt, {
+      isValid: (v) => typeof v?.explanation === 'string' && v.explanation.length > 0,
+      runName: 'roadmap_topic_explain',
+    });
+
+    if (!data) {
+      throw new AppError('Could not generate an explanation right now. Please try again.', 503);
+    }
+
+    res.json({ success: true, provider, detail: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const CHAT_PROMPT = `
+You are a mentor answering a learner's question about their own learning roadmap.
+
+Ground every answer in their goal and the roadmap they're following — reference specific stages
+or steps when relevant. If they ask something outside the roadmap, answer it anyway, but tie it
+back to where it fits in their plan.
+
+Be direct and specific. Name real technologies. Keep it under 200 words unless the question
+genuinely needs more. If they ask for an ordering or comparison, commit to a recommendation
+rather than listing options neutrally.
+
+Respond with strictly this JSON and nothing else:
+{ "answer": "Your reply as plain prose. No markdown headings." }
+`.trim();
+
+/** Q&A grounded in this roadmap; history comes from the client so nothing extra is stored. */
+router.post('/:id/chat', generateLimiter, async (req, res, next) => {
+  try {
+    const { question, history = [] } = req.body;
+    if (!question?.trim()) throw new AppError('Ask a question first.', 422);
+    if (question.length > 1000) throw new AppError('Question is too long.', 422);
+
+    const roadmap = await Roadmap.findOne({ _id: req.params.id, userId: req.userId }).lean();
+    if (!roadmap) throw new AppError('Roadmap not found.', 404);
+
+    // Only the outline goes in — full step bodies would crowd out the question
+    // on smaller context windows in the provider cascade.
+    const outline = roadmap.stages
+      .map((stage) => {
+        const steps = stage.steps
+          .map((s) => `  - ${s.title}${s.completed ? ' (done)' : ''}`)
+          .join('\n');
+        return `${stage.title}\n${steps}`;
+      })
+      .join('\n');
+
+    const recent = Array.isArray(history)
+      ? history
+          .slice(-6)
+          .map((m) => `${m.role === 'user' ? 'Learner' : 'Mentor'}: ${String(m.content).slice(0, 800)}`)
+          .join('\n')
+      : '';
+
+    const userPrompt = `
+[GOAL]
+${roadmap.goal}
+
+[ROADMAP OUTLINE]
+${outline}
+${recent ? `\n[EARLIER IN THIS CONVERSATION]\n${recent}` : ''}
+
+[QUESTION]
+${question.trim()}
+`.trim();
+
+    const { data, provider } = await generateStructuredAi(CHAT_PROMPT, userPrompt, {
+      isValid: (v) => typeof v?.answer === 'string' && v.answer.length > 0,
+      runName: 'roadmap_chat',
+    });
+
+    if (!data) {
+      throw new AppError('Could not answer that right now. Please try again.', 503);
+    }
+
+    res.json({ success: true, provider, answer: data.answer });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const { deletedCount } = await Roadmap.deleteOne({

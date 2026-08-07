@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 import ProviderBadge from '../components/ui/ProviderBadge';
+import TopicDetailPanel from '../components/roadmap/TopicDetailPanel';
+import RoadmapChat from '../components/roadmap/RoadmapChat';
 
 const PRESETS = [
   'Backend engineer at a fintech company',
@@ -24,6 +26,14 @@ export default function Roadmap() {
   const [useResume, setUseResume] = useState(true);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [openTopic, setOpenTopic] = useState(null); // { topic, stepTitle }
+  // Explanations are stable and rate-limited, so reopening a topic reuses the
+  // first answer instead of spending another call.
+  const [topicCache, setTopicCache] = useState({});
+
+  const cacheTopic = useCallback((topic, detail) => {
+    setTopicCache((prev) => ({ ...prev, [topic]: detail }));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -301,15 +311,28 @@ export default function Roadmap() {
                               </p>
                             )}
                             {step.topics?.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {step.topics.map((t) => (
-                                  <span
-                                    key={t}
-                                    className="rounded border border-surface-border px-1.5 py-0.5 text-[10px] text-app-muted"
-                                  >
-                                    {t}
-                                  </span>
-                                ))}
+                              <div className="mt-2">
+                                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-app-muted">
+                                  Topics — tap any for a deep dive
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {step.topics.map((t) => (
+                                    <button
+                                      key={t}
+                                      type="button"
+                                      // Inside a <label>; without this the click also toggles the checkbox.
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setOpenTopic({ topic: t, stepTitle: step.title });
+                                      }}
+                                      className="rounded border border-surface-border px-1.5 py-0.5 text-[10px] text-app-muted transition hover:border-primary hover:bg-primary/5 hover:text-primary"
+                                    >
+                                      {t}
+                                      {topicCache[t] ? ' ✓' : ''}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             )}
                             {step.approach && (
@@ -345,10 +368,23 @@ export default function Roadmap() {
                   </div>
                 </div>
               ))}
+
+              <RoadmapChat roadmapId={active._id} goal={active.goal} />
             </div>
           )}
         </div>
       </div>
+
+      {openTopic && active && (
+        <TopicDetailPanel
+          roadmapId={active._id}
+          topic={openTopic.topic}
+          stepTitle={openTopic.stepTitle}
+          cached={topicCache[openTopic.topic]}
+          onCache={cacheTopic}
+          onClose={() => setOpenTopic(null)}
+        />
+      )}
     </div>
   );
 }
