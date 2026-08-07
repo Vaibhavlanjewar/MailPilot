@@ -35,12 +35,14 @@ const navSections = [
       // The resume grounds Career Fit, Interview Prep, Roadmap and Ask My
       // Resume, so it leads here even though campaigns can attach it too.
       { to: '/app/resume', label: 'My Resume', icon: DocumentTextIcon },
+      // Sits with the other two resume-grounded tools rather than down with
+      // Community — all three answer questions about the same document.
+      { to: '/app/resume-chat', label: 'Ask My Resume', icon: ChatQuestionIcon },
       { to: '/app/career-fit', label: 'Career Fit', icon: CompassIcon },
       { to: '/app/roadmap', label: 'Learning Roadmap', icon: RoadmapIcon },
       { to: '/app/interview-prep', label: 'Interview Prep', icon: AcademicCapIcon },
       { to: '/app/mock-interview', label: 'Live Practice Room', icon: VideoIcon, soon: !LIVE_PRACTICE_ROOM_ENABLED },
       { to: '/app/jobs', label: 'Job Board', icon: BriefcaseIcon },
-      { to: '/app/resume-chat', label: 'Ask My Resume', icon: ChatQuestionIcon },
       { to: '/app/community', label: 'Community', icon: ChatBubbleIcon },
       { to: '/app/mind-games', label: 'Mind Games', icon: PuzzleIcon },
     ],
