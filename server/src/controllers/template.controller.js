@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { Template } from '../models/Template.js';
 import { AppError } from '../utils/AppError.js';
 import { logger } from '../utils/logger.js';
-import { generateTemplateFromPrompt } from '../services/ai/templateAi.service.js';
+import { generateTemplateFromPrompt, chatAboutTemplate } from '../services/ai/templateAi.service.js';
 import { getUserResume } from '../services/resume.service.js';
 
 const DEFAULT_TEMPLATE_NAME = 'Software Engineer Application';
@@ -116,6 +116,37 @@ export async function generateTemplateAi(req, res, next) {
       body: generated.body,
       provider: generated.provider,
       usedResume: Boolean(resume),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function chatTemplate(req, res, next) {
+  try {
+    const { subject = '', body = '', message, history = [] } = req.body;
+    if (!message?.trim()) {
+      throw new AppError('Say what you want changed.', 422);
+    }
+    if (message.length > 1000) {
+      throw new AppError('Message is too long.', 422);
+    }
+    if (!subject.trim() && !body.trim()) {
+      throw new AppError('Write or generate a draft first, then ask for changes.', 422);
+    }
+
+    const { data, provider } = await chatAboutTemplate({ subject, body, message: message.trim(), history });
+
+    if (!data) {
+      throw new AppError('Could not apply that change right now. Please try again.', 503);
+    }
+
+    res.json({
+      success: true,
+      subject: data.subject,
+      body: data.body,
+      reply: data.reply,
+      provider,
     });
   } catch (err) {
     next(err);

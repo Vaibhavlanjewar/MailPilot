@@ -17,6 +17,15 @@ const contactSchema = new mongoose.Schema(
     name: { type: String, trim: true, default: '' },
     company: { type: String, trim: true, default: '' },
     subscribed: { type: Boolean, default: true, index: true },
+    /**
+     * Distinguishes contacts brought in by the single-CSV import from ones
+     * typed in by hand, so re-uploading a CSV can prune rows that were
+     * removed from the new file without ever touching manually-added
+     * contacts. Existing documents predate this field and default to
+     * 'manual', which is the safe reading — nothing pre-existing gets pruned
+     * by a later CSV replace.
+     */
+    source: { type: String, enum: ['csv', 'manual'], default: 'manual' },
   },
   { timestamps: true }
 );

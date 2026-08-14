@@ -4,6 +4,7 @@ import Button from "../components/ui/Button";
 import Input, { Label } from "../components/ui/Input";
 import DataTable from "../components/ui/DataTable";
 import { PageLoader } from "../components/ui/LoadingSpinner";
+import { toast } from "react-toastify";
 import { api } from "../services/api";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -76,6 +77,8 @@ export default function Contacts() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [csvImport, setCsvImport] = useState(null); // { fileName, rowCount, importedAt } | null
+  const [pendingFile, setPendingFile] = useState(null); // set while the replace-confirm dialog is open
   const [createBusy, setCreateBusy] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showManualAdd, setShowManualAdd] = useState(false);
@@ -230,9 +233,19 @@ export default function Contacts() {
     }
   }, []);
 
+  const loadImportInfo = useCallback(async () => {
+    try {
+      const { data } = await api.get("/contacts/import");
+      setCsvImport(data.import || null);
+    } catch {
+      // Non-fatal — the upload button just falls back to "Upload CSV" wording.
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadImportInfo();
+  }, [load, loadImportInfo]);
 
   useEffect(() => {
     setSelectedIds((prev) =>
@@ -336,21 +349,37 @@ export default function Contacts() {
     }
   }
 
-  async function handleFile(e) {
+  function handleFilePicked(e) {
     const file = e.target.files?.[0];
+    e.target.value = ""; // always reset so picking the same filename again still fires onChange
     if (!file) return;
+
+    // A CSV is already on file — replacing it prunes rows removed from the
+    // new one, so this needs an explicit confirmation rather than uploading
+    // straight away.
+    if (csvImport) {
+      setPendingFile(file);
+      return;
+    }
+    void uploadCsv(file);
+  }
+
+  async function uploadCsv(file) {
     setUploadBusy(true);
     setError(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      await api.post("/contacts/upload", formData);
-      await load();
+      const { data } = await api.post("/contacts/upload", formData);
+      await Promise.all([load(), loadImportInfo()]);
+      if (typeof data?.removed === "number" && data.removed > 0) {
+        toast.info(`${data.removed} contact${data.removed === 1 ? "" : "s"} no longer in the file ${data.removed === 1 ? "was" : "were"} removed.`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setUploadBusy(false);
-      e.target.value = "";
+      setPendingFile(null);
     }
   }
 
@@ -531,6 +560,17 @@ export default function Contacts() {
             </div>
           }
         />
+        {csvImport && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface-border bg-app-muted/40 px-4 py-3 text-xs">
+            <p className="text-slate-600 dark:text-slate-300">
+              Current file: <span className="font-semibold text-slate-800 dark:text-slate-100">{csvImport.fileName}</span>
+              {" — "}
+              {csvImport.rowCount} contact{csvImport.rowCount === 1 ? "" : "s"}
+              {" · uploaded "}
+              {new Date(csvImport.importedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+            </p>
+          </div>
+        )}
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="inline-flex cursor-pointer">
@@ -538,11 +578,11 @@ export default function Contacts() {
                 type="file"
                 accept=".csv,text/csv"
                 className="sr-only"
-                onChange={handleFile}
+                onChange={handleFilePicked}
                 disabled={uploadBusy}
               />
               <span className="inline-flex rounded-lg border border-surface-border bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
-                {uploadBusy ? "Uploading…" : "Upload CSV"}
+                {uploadBusy ? "Uploading…" : csvImport ? "Replace CSV" : "Upload CSV"}
               </span>
             </label>
             <Button type="button" variant="ghost" size="sm" onClick={downloadCsvTemplate}>
@@ -736,6 +776,33 @@ export default function Contacts() {
           </div>
         </div>
       </div>
+
+      {pendingFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6">
+          <Card className="w-full max-w-lg">
+            <CardHeader
+              title="Replace your contact list?"
+              description={`"${csvImport?.fileName}" is currently active. Uploading "${pendingFile.name}" will replace it.`}
+            />
+            <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+              <p>
+                Contacts from the current CSV that aren't in the new file will be{" "}
+                <span className="font-semibold text-rose-600 dark:text-rose-400">removed</span>. Contacts
+                that appear in both keep their history (past campaigns stay linked). Clients you added by
+                hand under "Add client" are never affected by this.
+              </p>
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setPendingFile(null)} disabled={uploadBusy}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" disabled={uploadBusy} onClick={() => void uploadCsv(pendingFile)}>
+                {uploadBusy ? "Replacing…" : "Replace contact list"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {editContact && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6">

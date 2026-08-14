@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import validator from 'validator';
 import { Contact } from '../models/Contact.js';
+import { ContactImport } from '../models/ContactImport.js';
 import { AppError } from '../utils/AppError.js';
 import { parseContactsCsv } from '../utils/csvParser.js';
 import { logger } from '../utils/logger.js';
@@ -114,7 +115,10 @@ export async function bulkContacts(req, res, next) {
                 },
               }
             : {}),
-          $setOnInsert: { userId, email: row.email },
+          // Explicit rather than relying on the schema default: bulkWrite is a
+          // raw MongoDB operation and does not reliably apply Mongoose
+          // document defaults on insert.
+          $setOnInsert: { userId, email: row.email, source: 'manual' },
         },
         upsert: true,
       },
@@ -278,6 +282,13 @@ export async function updateContact(req, res, next) {
   }
 }
 
+/**
+ * Imports a CSV as the caller's single active contact list. A second upload
+ * REPLACES it: rows still present keep their _id (so campaign history and any
+ * subscription changes on them survive), rows no longer in the file are
+ * removed, and new rows are inserted. Contacts added by hand (source:
+ * 'manual') are never touched here — only the CSV-managed set is pruned.
+ */
 export async function uploadContacts(req, res, next) {
   try {
     if (!req.file?.buffer) {
@@ -287,18 +298,17 @@ export async function uploadContacts(req, res, next) {
     const rows = parseContactsCsv(req.file.buffer);
     const userId = new mongoose.Types.ObjectId(req.userId);
 
+    const beforeCsvCount = await Contact.countDocuments({ userId, source: 'csv' });
+
     const ops = rows.map((row) => ({
       updateOne: {
         filter: { userId, email: row.email },
         update: {
-          ...((row.name || row.company)
-            ? {
-                $set: {
-                  ...(row.name ? { name: row.name } : {}),
-                  ...(row.company ? { company: row.company } : {}),
-                },
-              }
-            : {}),
+          $set: {
+            source: 'csv',
+            ...(row.name ? { name: row.name } : {}),
+            ...(row.company ? { company: row.company } : {}),
+          },
           $setOnInsert: { userId, email: row.email },
         },
         upsert: true,
@@ -307,14 +317,60 @@ export async function uploadContacts(req, res, next) {
 
     await Contact.bulkWrite(ops, { ordered: false });
 
-    const count = await Contact.countDocuments({ userId: req.userId });
+    const newEmails = rows.map((row) => row.email);
+    const { deletedCount: removed } = await Contact.deleteMany({
+      userId,
+      source: 'csv',
+      email: { $nin: newEmails },
+    });
 
-    logger.info('Contacts CSV imported', { userId, imported: rows.length, total: count });
+    await ContactImport.findOneAndUpdate(
+      { userId },
+      {
+        $set: {
+          userId,
+          fileName: req.file.originalname || 'contacts.csv',
+          rowCount: rows.length,
+          importedAt: new Date(),
+        },
+      },
+      { upsert: true },
+    );
+
+    const count = await Contact.countDocuments({ userId });
+
+    logger.info('Contacts CSV imported', {
+      userId,
+      imported: rows.length,
+      removed,
+      total: count,
+      replaced: beforeCsvCount > 0,
+    });
 
     res.status(201).json({
       message: 'Contacts imported',
       imported: rows.length,
+      removed,
       totalContacts: count,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** The current single-CSV import, or null if none has been uploaded yet. */
+export async function getContactImport(req, res, next) {
+  try {
+    const record = await ContactImport.findOne({ userId: req.userId }).lean();
+    if (!record) {
+      return res.json({ import: null });
+    }
+    res.json({
+      import: {
+        fileName: record.fileName,
+        rowCount: record.rowCount,
+        importedAt: record.importedAt,
+      },
     });
   } catch (err) {
     next(err);

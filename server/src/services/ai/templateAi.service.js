@@ -130,6 +130,67 @@ ${toHtmlList(projectBullets)}
   };
 }
 
+const CHAT_SYSTEM_PROMPT = `You are an expert cold email editor, making a targeted change to an
+EXISTING email template through conversation — not writing a new one from scratch.
+
+Rules, in order of importance:
+1. Return the COMPLETE updated subject and body, not a diff or just the changed part.
+2. Any existing "{{token}}" placeholder (e.g. {{name}}, {{company}}, {{first_name}}) must be
+   preserved exactly, character for character. Never invent new placeholders.
+3. Any existing "<!-- MAILPILOT:...:START -->" / "<!-- MAILPILOT:...:END -->" HTML comment and
+   everything between a matching START/END pair (signature block, projects block) must be copied
+   through byte-for-byte, in the same position. These are machine-managed sections — do not
+   reword, reformat, reorder, remove, or move their contents, even if asked to "shorten" or
+   "improve" the email. If the user's request genuinely requires changing what's inside one of
+   these blocks, leave the block untouched anyway and mention in your reply that they should use
+   the "Insert signature" / "Insert project links" buttons instead, which regenerate it safely.
+4. Never alter, remove, or invent any "<a href=...>" link that already exists outside those
+   blocks either — real URLs must never be touched by a wording edit.
+5. Apply ONLY the requested change. Do not rewrite unrelated sentences.
+6. The body must stay email-client-safe HTML — only tags already used in the input, plus <p>,
+   <strong>, <em>, <ul>, <li>, <h3>, <br>, with inline styles. No external CSS, no <script>.
+
+Respond with strictly this JSON and nothing else:
+{
+  "subject": "the full updated subject line",
+  "body": "the full updated HTML body",
+  "reply": "One or two sentences describing what you changed, addressed to the user."
+}`;
+
+/**
+ * Conversational editing of a template draft. Stateless and keyed on the
+ * current subject/body rather than a saved template id, so it works while
+ * creating a brand new template too, before anything has been saved.
+ */
+export async function chatAboutTemplate({ subject, body, message, history }) {
+  const recent = Array.isArray(history)
+    ? history
+        .slice(-6)
+        .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content || '').slice(0, 600)}`)
+        .join('\n')
+    : '';
+
+  const userPrompt = `
+[CURRENT SUBJECT]
+${subject || '(empty)'}
+
+[CURRENT BODY]
+${body || '(empty)'}
+${recent ? `\n[EARLIER IN THIS CONVERSATION]\n${recent}` : ''}
+
+[REQUESTED CHANGE]
+${message}
+`.trim();
+
+  const { data, provider } = await generateStructuredAi(CHAT_SYSTEM_PROMPT, userPrompt, {
+    isValid: (v) =>
+      typeof v?.subject === 'string' && typeof v?.body === 'string' && typeof v?.reply === 'string',
+    runName: 'template_chat_edit',
+  });
+
+  return { data, provider };
+}
+
 export async function generateTemplateFromPrompt(userPrompt) {
   const prompt = normalize(userPrompt);
   if (!prompt) {

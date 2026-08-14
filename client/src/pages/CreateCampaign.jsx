@@ -7,6 +7,7 @@ import HtmlPreview, { HtmlViewModeToggle } from '../components/HtmlPreview';
 import Badge from '../components/ui/Badge';
 import { toast } from 'react-toastify';
 import { cn } from '../utils/cn';
+import { insertSignature, insertProjectsSection, hasSignatureBlock, hasProjectsBlock } from '../utils/emailSignature';
 import { api } from '../services/api';
 
 const steps = [
@@ -101,6 +102,8 @@ export default function CreateCampaign() {
   const [contactsError, setContactsError] = useState('');
   const [hasResume, setHasResume] = useState(false);
   const [sender, setSender] = useState(null);
+  const [resumeLinks, setResumeLinks] = useState(null);
+  const [projectLinks, setProjectLinks] = useState([]);
   const [contactFilter, setContactFilter] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState([]);
 
@@ -166,7 +169,11 @@ export default function CreateCampaign() {
     loadCampaignLimits();
     api
       .get('/resumes/me')
-      .then(({ data }) => setHasResume(Boolean(data.resume)))
+      .then(({ data }) => {
+        setHasResume(Boolean(data.resume));
+        setResumeLinks(data.resume?.links || null);
+        setProjectLinks(data.resume?.projectLinks || []);
+      })
       .catch(() => setHasResume(false));
     // Mirrors resolveCampaignFrom() on the server so the preview shows the
     // address recipients will actually see, not a guess.
@@ -204,6 +211,30 @@ export default function CreateCampaign() {
       body: tpl.body || '',
     }));
     setBodyView('edit');
+  }
+
+  const hasAnyProfileLink = Boolean(
+    resumeLinks && Object.values(resumeLinks).some((v) => (v || '').trim()),
+  );
+
+  function handleInsertSignature() {
+    if (!hasAnyProfileLink) {
+      toast.info('Add LinkedIn, GitHub, etc. under My Resume first.');
+      return;
+    }
+    update('body', insertSignature(form.body, sender?.displayName || '', resumeLinks));
+    setBodyView('edit');
+    toast.success(hasSignatureBlock(form.body) ? 'Signature updated.' : 'Signature inserted.');
+  }
+
+  function handleInsertProjects() {
+    if (!projectLinks.length) {
+      toast.info('Add project links under My Resume first.');
+      return;
+    }
+    update('body', insertProjectsSection(form.body, projectLinks));
+    setBodyView('edit');
+    toast.success(hasProjectsBlock(form.body) ? 'Project links updated.' : 'Project links inserted.');
   }
 
   const activeContacts = useMemo(
@@ -883,6 +914,34 @@ export default function CreateCampaign() {
                 ) : (
                   <HtmlPreview html={form.body} minHeight="320px" emptyMessage="No HTML yet - switch to Edit HTML or pick a template." />
                 )}
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleInsertSignature}
+                    disabled={!hasAnyProfileLink}
+                    title={hasAnyProfileLink ? '' : 'Add profile links under My Resume first'}
+                  >
+                    {hasSignatureBlock(form.body) ? 'Update signature' : 'Insert signature'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleInsertProjects}
+                    disabled={!projectLinks.length}
+                    title={projectLinks.length ? '' : 'Add project links under My Resume first'}
+                  >
+                    {hasProjectsBlock(form.body) ? 'Update project links' : 'Insert project links'}
+                  </Button>
+                  {(!hasAnyProfileLink || !projectLinks.length) && (
+                    <Link to="/app/resume" className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-300">
+                      Add links under My Resume
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
           )}

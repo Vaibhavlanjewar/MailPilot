@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import validator from 'validator';
 import { authenticate } from '../middlewares/auth.js';
+import { Resume } from '../models/Resume.js';
 import {
   getUserResume,
   saveUserResume,
@@ -13,6 +15,40 @@ import { AppError } from '../utils/AppError.js';
 const router = Router();
 
 const DEFAULT_LINKS = { linkedin: '', github: '', portfolio: '', leetcode: '' };
+const MAX_PROJECT_LINKS = 10;
+
+/**
+ * These get embedded verbatim as <a href> in outbound campaign emails, so a
+ * malformed value here isn't just a cosmetic bug — it can produce a broken
+ * link in something already sent. Reject rather than silently drop or coerce.
+ */
+function sanitizeProjectLinks(input) {
+  if (input === undefined) return undefined; // omitted = leave unchanged
+  if (!Array.isArray(input)) {
+    throw new AppError('projectLinks must be an array of { title, url }', 422);
+  }
+  if (input.length > MAX_PROJECT_LINKS) {
+    throw new AppError(`projectLinks is limited to ${MAX_PROJECT_LINKS} entries`, 422);
+  }
+
+  const out = [];
+  for (const row of input) {
+    const title = typeof row?.title === 'string' ? row.title.trim() : '';
+    const url = typeof row?.url === 'string' ? row.url.trim() : '';
+    if (!title && !url) continue; // a fully blank row from the UI — skip quietly
+    if (!title || !url) {
+      throw new AppError('Each project link needs both a title and a URL.', 422);
+    }
+    if (!validator.isURL(url, { require_protocol: true, protocols: ['http', 'https'] })) {
+      throw new AppError(`"${url}" is not a valid http(s) URL.`, 422);
+    }
+    if (title.length > 80) {
+      throw new AppError('Project link titles must be under 80 characters.', 422);
+    }
+    out.push({ title, url });
+  }
+  return out;
+}
 
 router.use(authenticate);
 
@@ -44,8 +80,9 @@ function validateContent(content, fileSize) {
  */
 router.put('/me', async (req, res, next) => {
   try {
-    const { title, content, source, links, fileName, fileSize, fileBase64, mimeType } = req.body;
+    const { title, content, source, links, projectLinks, fileName, fileSize, fileBase64, mimeType } = req.body;
     validateContent(content, fileSize);
+    const sanitizedProjectLinks = sanitizeProjectLinks(projectLinks);
 
     // The binary is optional (pasted text has none) and goes to Firebase Storage,
     // never into the Mongo document.
@@ -65,6 +102,7 @@ router.put('/me', async (req, res, next) => {
         source: ['upload', 'paste', 'built'].includes(source) ? source : 'upload',
         content: content.trim(),
         links: { ...DEFAULT_LINKS, ...(links || {}) },
+        ...(sanitizedProjectLinks !== undefined ? { projectLinks: sanitizedProjectLinks } : {}),
         fileName: fileName || '',
         fileSize: Number(fileSize) || content.length,
         builderData: '',
@@ -79,17 +117,65 @@ router.put('/me', async (req, res, next) => {
   }
 });
 
+/**
+ * Updates only the profile links and/or project links, without touching resume
+ * content, the embedding index, or the stored file.
+ *
+ * Deliberately NOT implemented by calling saveUserResume(): that function
+ * treats "no fileBase64 in this call" as "the attached file was removed" and
+ * deletes it from ResumeFile accordingly (see resume.service.js). Routing a
+ * links-only edit through it would silently delete the user's attachment the
+ * next time they update their LinkedIn URL. A direct, narrow $set avoids that
+ * failure mode entirely and also skips re-running embeddings for text that
+ * didn't change.
+ */
+router.patch('/me/links', async (req, res, next) => {
+  try {
+    const { links, projectLinks } = req.body;
+    const sanitizedProjectLinks = sanitizeProjectLinks(projectLinks);
+
+    const update = {};
+    if (links !== undefined) {
+      if (typeof links !== 'object' || links === null || Array.isArray(links)) {
+        throw new AppError('links must be an object', 422);
+      }
+      update.links = { ...DEFAULT_LINKS, ...links };
+    }
+    if (sanitizedProjectLinks !== undefined) {
+      update.projectLinks = sanitizedProjectLinks;
+    }
+    if (!Object.keys(update).length) {
+      throw new AppError('Send links and/or projectLinks to update.', 422);
+    }
+
+    const resume = await Resume.findOneAndUpdate(
+      { userId: req.userId },
+      { $set: update },
+      { new: true },
+    );
+    if (!resume) {
+      throw new AppError('You have no resume yet — add one first.', 404);
+    }
+
+    res.json({ success: true, resume: resume.toSummary() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /** Saves the structured builder output as the caller's resume. */
 router.put('/me/built', async (req, res, next) => {
   try {
-    const { title, content, links, templates, builderData } = req.body;
+    const { title, content, links, projectLinks, templates, builderData } = req.body;
     validateContent(content);
+    const sanitizedProjectLinks = sanitizeProjectLinks(projectLinks);
 
     const resume = await saveUserResume(req.userId, {
       title: title?.trim() || 'My resume',
       source: 'built',
       content: content.trim(),
       links: { ...DEFAULT_LINKS, ...(links || {}) },
+      ...(sanitizedProjectLinks !== undefined ? { projectLinks: sanitizedProjectLinks } : {}),
       builderData:
         typeof builderData === 'string' ? builderData : JSON.stringify(builderData || {}),
       templates: templates || 'Modern Tech',

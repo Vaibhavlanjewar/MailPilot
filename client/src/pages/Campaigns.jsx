@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import DataTable from '../components/ui/DataTable';
@@ -12,7 +12,10 @@ export default function Campaigns() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [confirming, setConfirming] = useState(null); // the row pending confirmation
+  const [selectedIds, setSelectedIds] = useState([]);
+  // { rows: Row[] } while a confirmation dialog is open — covers both a
+  // single-row delete and a bulk one, so there is one modal, not two.
+  const [confirming, setConfirming] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
@@ -33,26 +36,91 @@ export default function Campaigns() {
     load();
   }, [load]);
 
+  // Rows can disappear from under a stale selection after a delete or reload.
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => rows.some((row) => row.id === id)));
+  }, [rows]);
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const allSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row.id));
+
+  function toggleRow(id) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function toggleAll() {
+    setSelectedIds(allSelected ? [] : rows.map((row) => row.id));
+  }
+
   async function handleDelete() {
-    if (!confirming) return;
+    if (!confirming?.rows?.length) return;
     setDeleting(true);
-    try {
-      const { data } = await api.delete(`/campaign/${confirming.id}`);
-      toast.success(
-        data.emailLogsDeleted
-          ? `Deleted "${confirming.name}" and ${data.emailLogsDeleted} recipient record${data.emailLogsDeleted === 1 ? '' : 's'}.`
-          : `Deleted "${confirming.name}".`,
-      );
-      setConfirming(null);
-      load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not delete the campaign.');
-    } finally {
-      setDeleting(false);
+
+    // allSettled rather than all: one campaign failing to delete (e.g. it was
+    // already removed elsewhere) shouldn't block the rest of a bulk delete.
+    const results = await Promise.allSettled(
+      confirming.rows.map((row) => api.delete(`/campaign/${row.id}`)),
+    );
+
+    const succeeded = results.filter((r) => r.status === 'fulfilled');
+    const failed = results.length - succeeded.length;
+    const recipientsDeleted = succeeded.reduce(
+      (sum, r) => sum + (Number(r.value?.data?.emailLogsDeleted) || 0),
+      0,
+    );
+
+    if (confirming.rows.length === 1) {
+      if (succeeded.length) {
+        toast.success(
+          recipientsDeleted
+            ? `Deleted "${confirming.rows[0].name}" and ${recipientsDeleted} recipient record${recipientsDeleted === 1 ? '' : 's'}.`
+            : `Deleted "${confirming.rows[0].name}".`,
+        );
+      } else {
+        toast.error('Could not delete the campaign.');
+      }
+    } else {
+      if (succeeded.length) {
+        toast.success(
+          `Deleted ${succeeded.length} campaign${succeeded.length === 1 ? '' : 's'}` +
+            (recipientsDeleted ? ` and ${recipientsDeleted} recipient records` : '') +
+            '.',
+        );
+      }
+      if (failed) {
+        toast.error(`${failed} campaign${failed === 1 ? '' : 's'} could not be deleted.`);
+      }
     }
+
+    setConfirming(null);
+    setSelectedIds([]);
+    setDeleting(false);
+    load();
   }
 
   const columns = [
+    {
+      key: 'select',
+      header: (
+        <input
+          type="checkbox"
+          aria-label="Select all campaigns"
+          checked={allSelected}
+          onChange={toggleAll}
+          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+        />
+      ),
+      className: 'w-10',
+      render: (row) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${row.name}`}
+          checked={selectedSet.has(row.id)}
+          onChange={() => toggleRow(row.id)}
+          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+        />
+      ),
+    },
     {
       key: 'name',
       header: 'Name',
@@ -96,7 +164,7 @@ export default function Campaigns() {
       render: (row) => (
         <button
           type="button"
-          onClick={() => setConfirming(row)}
+          onClick={() => setConfirming({ rows: [row] })}
           className="rounded-lg px-2 py-1 text-sm font-medium text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
         >
           Delete
@@ -114,6 +182,8 @@ export default function Campaigns() {
     );
   }
 
+  const selectedRows = rows.filter((row) => selectedSet.has(row.id));
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -124,6 +194,33 @@ export default function Campaigns() {
           Create campaign
         </LinkButton>
       </div>
+
+      {rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-app bg-app-surface p-3">
+          <p className="text-sm text-slate-500">
+            {selectedRows.length ? `${selectedRows.length} selected` : 'Select campaigns to delete them together'}
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!selectedRows.length}
+            onClick={() => setConfirming({ rows: selectedRows })}
+          >
+            Delete selected
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="text-rose-600 dark:text-rose-400"
+            onClick={() => setConfirming({ rows })}
+          >
+            Delete all
+          </Button>
+        </div>
+      )}
+
       <DataTable columns={columns} rows={rows} loading={false} emptyMessage="No campaigns yet." />
 
       {confirming && (
@@ -136,15 +233,20 @@ export default function Campaigns() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Delete "{confirming.name}"?
+              {confirming.rows.length === 1
+                ? `Delete "${confirming.rows[0].name}"?`
+                : `Delete ${confirming.rows.length} campaigns?`}
             </h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              This permanently removes the campaign and all {confirming.total || 0} recipient
-              records, including their delivery status and open tracking. This can't be undone.
+              {confirming.rows.length === 1
+                ? `This permanently removes the campaign and all ${confirming.rows[0].total || 0} recipient records, including their delivery status and open tracking. This can't be undone.`
+                : `This permanently removes ${confirming.rows.length} campaigns and all ${confirming.rows.reduce((sum, r) => sum + (r.total || 0), 0)} recipient records across them, including delivery status and open tracking. This can't be undone.`}
             </p>
-            {confirming.status !== 'completed' && (
+            {confirming.rows.some((r) => r.status !== 'completed') && (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                This campaign hasn't finished sending. Any emails still queued will be cancelled.
+                {confirming.rows.length === 1
+                  ? "This campaign hasn't finished sending. Any emails still queued will be cancelled."
+                  : "Some of these campaigns haven't finished sending. Any emails still queued for them will be cancelled."}
               </p>
             )}
             <div className="mt-5 flex justify-end gap-2">

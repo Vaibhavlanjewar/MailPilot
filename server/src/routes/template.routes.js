@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { body, param } from 'express-validator';
 import { authenticate } from '../middlewares/auth.js';
 import { validateRequest } from '../middlewares/validateRequest.js';
@@ -6,14 +7,36 @@ import * as templateController from '../controllers/template.controller.js';
 
 const router = Router();
 
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many AI requests. Please wait a few minutes.' },
+  keyGenerator: (req) => req.userId || req.ip,
+});
+
 router.get('/', authenticate, templateController.listTemplates);
 
 router.post(
   '/ai-generate',
   authenticate,
+  aiLimiter,
   body('prompt').trim().notEmpty().withMessage('prompt is required'),
   validateRequest,
   templateController.generateTemplateAi
+);
+
+router.post(
+  '/chat',
+  authenticate,
+  aiLimiter,
+  body('message').trim().notEmpty().withMessage('message is required'),
+  body('subject').optional().isString(),
+  body('body').optional().isString(),
+  body('history').optional().isArray(),
+  validateRequest,
+  templateController.chatTemplate
 );
 
 router.post(

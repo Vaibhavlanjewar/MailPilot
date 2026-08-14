@@ -5,6 +5,13 @@ import api from '../services/api';
 import { extractTextFromFile, ACCEPTED_RESUME_TYPES } from '../services/documentText';
 
 const MAX_BYTES = 2 * 1024 * 1024;
+const EMPTY_LINKS = { linkedin: '', github: '', portfolio: '', leetcode: '' };
+const LINK_FIELDS = [
+  { key: 'linkedin', label: 'LinkedIn', placeholder: 'https://linkedin.com/in/you' },
+  { key: 'github', label: 'GitHub', placeholder: 'https://github.com/you' },
+  { key: 'portfolio', label: 'Portfolio', placeholder: 'https://yoursite.com' },
+  { key: 'leetcode', label: 'LeetCode', placeholder: 'https://leetcode.com/u/you' },
+];
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -23,11 +30,25 @@ export default function MyResume() {
   const [pasteText, setPasteText] = useState('');
   const [pasteTitle, setPasteTitle] = useState('My resume');
 
+  // Draft copies so editing doesn't touch `resume` (and re-render everything
+  // that reads it) until Save is actually pressed.
+  const [linksDraft, setLinksDraft] = useState(EMPTY_LINKS);
+  const [projectLinksDraft, setProjectLinksDraft] = useState([]);
+  const [linksBusy, setLinksBusy] = useState(false);
+  const [linksDirty, setLinksDirty] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get('/resumes/me');
       setResume(data.resume);
+      // Only seed drafts from the server on a fresh load, not after every
+      // background refetch — otherwise an in-progress edit could be clobbered
+      // by a reload triggered elsewhere (e.g. right after re-uploading the
+      // resume file itself, which also returns a fresh `resume`).
+      setLinksDraft({ ...EMPTY_LINKS, ...(data.resume?.links || {}) });
+      setProjectLinksDraft(data.resume?.projectLinks?.length ? data.resume.projectLinks : []);
+      setLinksDirty(false);
     } catch (err) {
       toast.error(err.message || 'Could not load your resume.');
     } finally {
@@ -96,6 +117,68 @@ export default function MyResume() {
       toast.error(err.message || 'Could not save the resume.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  function updateLink(key, value) {
+    setLinksDraft((prev) => ({ ...prev, [key]: value }));
+    setLinksDirty(true);
+  }
+
+  function updateProjectLink(index, field, value) {
+    setProjectLinksDraft((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
+    );
+    setLinksDirty(true);
+  }
+
+  function addProjectLink() {
+    if (projectLinksDraft.length >= 10) {
+      toast.info('Up to 10 project links.');
+      return;
+    }
+    setProjectLinksDraft((prev) => [...prev, { title: '', url: '' }]);
+    setLinksDirty(true);
+  }
+
+  function removeProjectLink(index) {
+    setProjectLinksDraft((prev) => prev.filter((_, i) => i !== index));
+    setLinksDirty(true);
+  }
+
+  async function handleSaveLinks() {
+    // Same rule the server enforces — checked here too so the user sees the
+    // problem before a request round-trip, not after.
+    const cleanedProjects = [];
+    for (const row of projectLinksDraft) {
+      const title = row.title.trim();
+      const url = row.url.trim();
+      if (!title && !url) continue; // a blank row left over from "Add link" — drop silently
+      if (!title || !url) {
+        toast.error('Each project link needs both a title and a URL.');
+        return;
+      }
+      if (!/^https?:\/\/\S+$/i.test(url)) {
+        toast.error(`"${url}" needs to start with http:// or https://`);
+        return;
+      }
+      cleanedProjects.push({ title, url });
+    }
+
+    setLinksBusy(true);
+    try {
+      const { data } = await api.patch('/resumes/me/links', {
+        links: linksDraft,
+        projectLinks: cleanedProjects,
+      });
+      setResume(data.resume);
+      setProjectLinksDraft(cleanedProjects);
+      setLinksDirty(false);
+      toast.success('Links saved.');
+    } catch (err) {
+      toast.error(err.message || 'Could not save links.');
+    } finally {
+      setLinksBusy(false);
     }
   }
 
@@ -187,7 +270,96 @@ export default function MyResume() {
             </Link>
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {resume && (
+        <div className="rounded-2xl border border-surface-border bg-app-surface p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-app">Profile &amp; project links</h2>
+          <p className="mt-1 text-xs text-app-muted">
+            Saved once here, then reused everywhere you write outreach — insert them into a
+            template or campaign as a one-click signature and a live-linked Projects section,
+            instead of retyping URLs into every email.
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {LINK_FIELDS.map((f) => (
+              <div key={f.key}>
+                <label htmlFor={`link-${f.key}`} className="block text-xs font-semibold uppercase tracking-wider text-app-muted">
+                  {f.label}
+                </label>
+                <input
+                  id={`link-${f.key}`}
+                  type="url"
+                  value={linksDraft[f.key]}
+                  onChange={(e) => updateLink(f.key, e.target.value)}
+                  placeholder={f.placeholder}
+                  className="mt-1 block w-full rounded-xl border border-input-border bg-transparent p-2.5 text-sm text-app outline-none focus:border-primary"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 border-t border-surface-border pt-4">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-app-muted">
+                Project links
+              </label>
+              <button
+                type="button"
+                onClick={addProjectLink}
+                className="text-xs font-semibold text-primary hover:underline"
+              >
+                + Add project link
+              </button>
+            </div>
+
+            {projectLinksDraft.length === 0 ? (
+              <p className="mt-2 text-xs italic text-app-muted">
+                No project links yet — add a live demo URL to feature it in outreach emails.
+              </p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {projectLinksDraft.map((row, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      value={row.title}
+                      onChange={(e) => updateProjectLink(i, 'title', e.target.value)}
+                      placeholder="Project name"
+                      className="min-w-0 flex-1 rounded-xl border border-input-border bg-transparent p-2.5 text-sm text-app outline-none focus:border-primary"
+                    />
+                    <input
+                      type="url"
+                      value={row.url}
+                      onChange={(e) => updateProjectLink(i, 'url', e.target.value)}
+                      placeholder="https://your-live-demo.com"
+                      className="min-w-0 flex-[2] rounded-xl border border-input-border bg-transparent p-2.5 text-sm text-app outline-none focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeProjectLink(i)}
+                      className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-500/10 dark:text-rose-400"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSaveLinks}
+            disabled={!linksDirty || linksBusy}
+            className="mt-5 rounded-xl bg-app-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-90 disabled:opacity-50"
+          >
+            {linksBusy ? 'Saving…' : 'Save links'}
+          </button>
+        </div>
+      )}
+
+      {!resume && (
         <div className="rounded-2xl border border-dashed border-surface-border bg-app-surface p-6 text-center">
           <p className="text-sm font-semibold text-app">No resume yet</p>
           <p className="mx-auto mt-1 max-w-md text-xs text-app-muted">

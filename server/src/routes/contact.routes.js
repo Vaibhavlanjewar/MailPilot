@@ -8,6 +8,7 @@ import * as contactController from '../controllers/contact.controller.js';
 const router = Router();
 
 router.get('/', authenticate, contactController.listContacts);
+router.get('/import', authenticate, contactController.getContactImport);
 
 router.post(
   '/bulk',

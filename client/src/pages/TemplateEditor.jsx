@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import Card, { CardHeader } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Input, { Label, TextArea } from "../components/ui/Input";
 import HtmlPreview, { HtmlViewModeToggle } from "../components/HtmlPreview";
 import { PageLoader } from "../components/ui/LoadingSpinner";
 import ProviderBadge from "../components/ui/ProviderBadge";
+import TemplateChat from "../components/templates/TemplateChat";
+import { insertSignature, insertProjectsSection, hasSignatureBlock, hasProjectsBlock } from "../utils/emailSignature";
 import { api } from "../services/api";
 
 export default function TemplateEditor() {
@@ -31,6 +34,58 @@ export default function TemplateEditor() {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Sourced from My Resume so the same profile/project links used elsewhere
+  // in the app can be inserted here without retyping them.
+  const [senderName, setSenderName] = useState("");
+  const [resumeLinks, setResumeLinks] = useState(null);
+  const [projectLinks, setProjectLinks] = useState([]);
+
+  useEffect(() => {
+    api
+      .get("/resumes/me")
+      .then(({ data }) => {
+        setResumeLinks(data.resume?.links || null);
+        setProjectLinks(data.resume?.projectLinks || []);
+      })
+      .catch(() => {});
+    api
+      .get("/users/me/settings")
+      .then(({ data }) => {
+        const address = (data.smtpUser || "").trim() || (data.email || "").trim();
+        const displayName =
+          (data.smtpFromDisplayName || "").trim() ||
+          (data.name || "").trim() ||
+          address.split("@")[0] ||
+          "";
+        setSenderName(displayName);
+      })
+      .catch(() => {});
+  }, []);
+
+  const hasAnyProfileLink = Boolean(
+    resumeLinks && Object.values(resumeLinks).some((v) => (v || "").trim()),
+  );
+
+  function handleInsertSignature() {
+    if (!hasAnyProfileLink) {
+      toast.info("Add LinkedIn, GitHub, etc. under My Resume first.");
+      return;
+    }
+    setBody((prev) => insertSignature(prev, senderName, resumeLinks));
+    setBodyView("edit");
+    toast.success(hasSignatureBlock(body) ? "Signature updated." : "Signature inserted.");
+  }
+
+  function handleInsertProjects() {
+    if (!projectLinks.length) {
+      toast.info("Add project links under My Resume first.");
+      return;
+    }
+    setBody((prev) => insertProjectsSection(prev, projectLinks));
+    setBodyView("edit");
+    toast.success(hasProjectsBlock(body) ? "Project links updated." : "Project links inserted.");
+  }
 
   const loadTemplate = useCallback(async () => {
     if (!isEdit) return;
@@ -316,7 +371,46 @@ export default function TemplateEditor() {
                 emptyMessage="Switch to Edit HTML and add markup to see a preview."
               />
             )}
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleInsertSignature}
+                disabled={!hasAnyProfileLink}
+                title={hasAnyProfileLink ? "" : "Add profile links under My Resume first"}
+              >
+                {hasSignatureBlock(body) ? "Update signature" : "Insert signature"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleInsertProjects}
+                disabled={!projectLinks.length}
+                title={projectLinks.length ? "" : "Add project links under My Resume first"}
+              >
+                {hasProjectsBlock(body) ? "Update project links" : "Insert project links"}
+              </Button>
+              {(!hasAnyProfileLink || !projectLinks.length) && (
+                <Link to="/app/resume" className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-300">
+                  Add links under My Resume
+                </Link>
+              )}
+            </div>
           </div>
+
+          <TemplateChat
+            getSubject={() => subject}
+            getBody={() => body}
+            onApply={(newSubject, newBody) => {
+              setSubject(newSubject);
+              setBody(newBody);
+              setBodyView("edit");
+            }}
+          />
+
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={saving}>
               {saving ? "Saving..." : "Save Template"}

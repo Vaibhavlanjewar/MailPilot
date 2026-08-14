@@ -10,6 +10,11 @@ const chunkSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const projectLinkSchema = new mongoose.Schema(
+  { title: { type: String, trim: true }, url: { type: String, trim: true } },
+  { _id: false },
+);
+
 const resumeSchema = new mongoose.Schema(
   {
     /** Unique: a user holds exactly one resume, replaced on re-upload. */
@@ -34,6 +39,14 @@ const resumeSchema = new mongoose.Schema(
       portfolio: { type: String, default: '' },
       leetcode: { type: String, default: '' },
     },
+    /**
+     * Named project URLs (e.g. a live demo), maintained once here and reused
+     * wherever campaign content needs them — the template editor and campaign
+     * composer both pull from this instead of the user retyping links per
+     * email. Capped at 10 by the route layer; not meant to duplicate the full
+     * project history in the resume text itself.
+     */
+    projectLinks: { type: [projectLinkSchema], default: [] },
     /** Structured builder payload (JSON string) when source === 'built'. */
     builderData: { type: String, default: '' },
     templates: { type: String, default: '' },
@@ -63,6 +76,7 @@ resumeSchema.methods.toSummary = function toSummary() {
     source: this.source,
     content: this.content,
     links: this.links,
+    projectLinks: this.projectLinks || [],
     builderData: this.builderData,
     templates: this.templates,
     fileName: this.fileName,
