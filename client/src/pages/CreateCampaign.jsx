@@ -204,13 +204,37 @@ export default function CreateCampaign() {
     }
     const tpl = templates.find((t) => String(t._id) === templateId);
     if (!tpl) return;
+
+    // Step 1 already requires a non-empty subject before the user can even
+    // reach this step, so by the time a template is picked here, form.subject
+    // is always something the user was forced to type themselves — never a
+    // leftover default. Overwriting it silently discarded that every time a
+    // template was applied. Body still comes from the template (that's the
+    // actual point of picking one); the subject stays exactly as typed until
+    // the user changes it themselves, with the template's own subject offered
+    // as a one-click suggestion instead of a silent overwrite.
     setForm((f) => ({
       ...f,
       selectedTemplateId: templateId,
-      subject: tpl.subject,
       body: tpl.body || '',
     }));
     setBodyView('edit');
+
+    if (tpl.subject && tpl.subject.trim() !== form.subject.trim()) {
+      toast.info(
+        <span>
+          Kept your subject line. This template's own subject is{' '}
+          <button
+            type="button"
+            onClick={() => update('subject', tpl.subject)}
+            className="font-semibold underline"
+          >
+            "{tpl.subject}" — use it instead
+          </button>
+        </span>,
+        { autoClose: 8000 },
+      );
+    }
   }
 
   const hasAnyProfileLink = Boolean(

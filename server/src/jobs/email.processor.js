@@ -11,6 +11,7 @@ import { maybeFinishCampaign } from "../services/campaign.queue.service.js";
 import { resolveCampaignFrom } from "../utils/mailFrom.js";
 import { formatEmailSendErrorForLog } from "../utils/smtpErrors.js";
 import { renderRecipientTemplate } from "../utils/templateRenderer.js";
+import { validateRecipientEmail } from "../utils/emailValidation.js";
 import { logger } from "../utils/logger.js";
 
 function appendTrackingPixel(html, trackingUrl) {
@@ -46,6 +47,28 @@ export async function processEmailJob(job) {
       error: "Campaign missing",
     });
     throw new UnrecoverableError("Campaign missing");
+  }
+
+  // Checked before the contact/owner lookups or any content rendering, so an
+  // invalid recipient costs one DNS lookup instead of a wasted render + a
+  // Gmail API round-trip that was always going to fail. This only catches a
+  // dead/typo'd domain (no MX or A/AAAA record) — it cannot prove a specific
+  // mailbox exists, since that needs SMTP access Render doesn't allow outbound.
+  const { valid, reason } = await validateRecipientEmail(log.toEmail);
+  if (!valid) {
+    await EmailLog.findByIdAndUpdate(emailLogId, {
+      status: "failed",
+      error: reason,
+      lastAttemptAt: new Date(),
+      $inc: { attempts: 1 },
+    });
+    await Campaign.findByIdAndUpdate(campaign._id, {
+      $inc: { "stats.failed": 1 },
+    });
+    await maybeFinishCampaign(campaign._id);
+    logger.info("Skipped invalid recipient", { emailLogId, to: log.toEmail, reason });
+    // Unrecoverable: retrying can't make a dead domain start resolving.
+    throw new UnrecoverableError(reason);
   }
 
   const contact = await Contact.findById(log.contactId)
