@@ -24,6 +24,7 @@ import mockInterviewRoutes from "./routes/mockInterview.routes.js";
 import discussionRoutes from "./routes/discussion.routes.js";
 import codeRoutes from "./routes/code.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
+import publicStatsRoutes from "./routes/publicStats.routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
 const app = express();
@@ -267,6 +268,7 @@ app.use("/api/mock-interview", mockInterviewRoutes);
 app.use("/api/discussions", discussionRoutes);
 app.use("/api/code", codeRoutes);
 app.use("/api/feedback", feedbackRoutes);
+app.use("/api/public/stats", publicStatsRoutes);
 app.use("/track", trackingRoutes);
 
 // ✅ Serve frontend

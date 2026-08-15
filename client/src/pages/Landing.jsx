@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import ThemeToggle from "../components/ui/ThemeToggle";
 import { useAuth } from "../context/AuthContext";
 import FeedbackModal from "../components/FeedbackModal";
+import api from "../services/api";
 
 const features = [
   {
@@ -59,6 +60,21 @@ export default function Landing() {
   const velocityRef = useRef(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userCount, setUserCount] = useState(null);
+
+  // Public, unauthenticated endpoint — a real number, not a marketing guess.
+  // Failing silently here is deliberate: a stat widget erroring out must
+  // never make the landing page itself look broken.
+  useEffect(() => {
+    api
+      .get("/public/stats")
+      .then(({ data }) => {
+        if (Number.isFinite(data?.userCount) && data.userCount > 0) {
+          setUserCount(data.userCount);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [velocityAnimCycle, setVelocityAnimCycle] = useState(0);
 
   function handleUpcomingCardClick(title) {
@@ -229,6 +245,15 @@ export default function Landing() {
                 View live demo
               </Link>
             </div>
+            {userCount !== null && (
+              <p className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                <span className="relative inline-flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                {userCount.toLocaleString()} job seeker{userCount === 1 ? "" : "s"} already using MailPilot
+              </p>
+            )}
           </div>
 
           <div
