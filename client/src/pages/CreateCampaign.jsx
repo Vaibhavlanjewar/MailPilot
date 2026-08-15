@@ -231,6 +231,42 @@ export default function CreateCampaign() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, templates]);
 
+  // "Use again" from the Campaigns list or a campaign's own detail page —
+  // loads that campaign's name/subject/body/recipients into a fresh wizard,
+  // going through the exact same steps as creating one from scratch.
+  // Deliberately overrides whatever draft was already restored above: picking
+  // "Use again" is an explicit signal to start from THIS campaign now.
+  useEffect(() => {
+    const duplicateFrom = location.state?.duplicateFrom;
+    if (!duplicateFrom) return;
+
+    navigate(location.pathname, { replace: true, state: {} });
+
+    api
+      .get(`/campaign/status/${duplicateFrom}`)
+      .then(({ data }) => {
+        const src = data?.campaign;
+        if (!src) return;
+        setForm((f) => ({
+          ...f,
+          name: `${src.name || 'Campaign'} (copy)`,
+          subject: src.subject || '',
+          body: src.content || '',
+          selectedTemplateId: '',
+          attachResume: src.attachResume !== false,
+        }));
+        setAudienceMode('contacts');
+        setSelectedContactIds((src.recipientContactIds || []).map(String));
+        setBodyView('edit');
+        setStep(1);
+        toast.info(`Loaded "${src.name}" — recipients already marked as emailed are flagged below.`);
+      })
+      .catch(() => {
+        toast.error('Could not load that campaign to reuse.');
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }

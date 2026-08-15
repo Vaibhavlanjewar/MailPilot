@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import Card, { CardHeader } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
@@ -27,6 +27,7 @@ function recipientVariant(status) {
 
 export default function CampaignDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [campaign, setCampaign] = useState(null);
@@ -104,9 +105,19 @@ export default function CampaignDetail() {
             </p>
           </div>
         </div>
-        <Badge variant={campaign.status === 'completed' ? 'completed' : campaign.status === 'processing' ? 'sending' : 'draft'}>
-          {campaign.status}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate('/app/campaigns/new', { state: { duplicateFrom: campaign._id } })}
+          >
+            Use this campaign again
+          </Button>
+          <Badge variant={campaign.status === 'completed' ? 'completed' : campaign.status === 'processing' ? 'sending' : 'draft'}>
+            {campaign.status}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">

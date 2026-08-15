@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import DataTable from '../components/ui/DataTable';
 import Button, { LinkButton } from '../components/ui/Button';
@@ -9,6 +9,7 @@ import { api } from '../services/api';
 import { mapCampaignToTableRow } from '../utils/campaignMappers';
 
 export default function Campaigns() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -162,13 +163,22 @@ export default function Campaigns() {
       key: 'actions',
       header: '',
       render: (row) => (
-        <button
-          type="button"
-          onClick={() => setConfirming({ rows: [row] })}
-          className="rounded-lg px-2 py-1 text-sm font-medium text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
-        >
-          Delete
-        </button>
+        <div className="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => navigate('/app/campaigns/new', { state: { duplicateFrom: row.id } })}
+            className="rounded-lg px-2 py-1 text-sm font-medium text-brand-600 transition hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-950/40"
+          >
+            Use again
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming({ rows: [row] })}
+            className="rounded-lg px-2 py-1 text-sm font-medium text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+          >
+            Delete
+          </button>
+        </div>
       ),
     },
   ];
