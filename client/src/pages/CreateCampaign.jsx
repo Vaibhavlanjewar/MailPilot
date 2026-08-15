@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Card, { CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input, { Label, TextArea, Select } from '../components/ui/Input';
@@ -8,12 +8,15 @@ import Badge from '../components/ui/Badge';
 import { toast } from 'react-toastify';
 import { cn } from '../utils/cn';
 import { insertSignature, insertProjectsSection, hasSignatureBlock, hasProjectsBlock } from '../utils/emailSignature';
+import { loadCampaignDraft, saveCampaignDraft, clearCampaignDraft } from '../utils/campaignDraft';
 import { api } from '../services/api';
 
+// Recipients first, then the template (so there's something worth previewing),
+// then the campaign's own name/subject, then a final review and send step.
 const steps = [
-  { id: 1, title: 'Details' },
-  { id: 2, title: 'Audience' },
-  { id: 3, title: 'Content' },
+  { id: 1, title: 'Recipients' },
+  { id: 2, title: 'Template' },
+  { id: 3, title: 'Campaign' },
   { id: 4, title: 'Preview' },
   { id: 5, title: 'Schedule' },
 ];
@@ -86,9 +89,18 @@ function dedupeContacts(list) {
 
 export default function CreateCampaign() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
+  const location = useLocation();
+
+  // Read once per mount. A redirect to My Resume or the Template Editor (and
+  // back) remounts this page, so whatever was typed before leaving needs to
+  // survive that round trip instead of resetting to a blank wizard.
+  const draftRef = useRef();
+  if (draftRef.current === undefined) draftRef.current = loadCampaignDraft() || {};
+  const draft = draftRef.current;
+
+  const [step, setStep] = useState(draft.step ?? 1);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(() => ({ ...initialForm, ...(draft.form || {}) }));
   const [error, setError] = useState('');
 
   const [templates, setTemplates] = useState([]);
@@ -103,15 +115,15 @@ export default function CreateCampaign() {
   const [resumeLinks, setResumeLinks] = useState(null);
   const [projectLinks, setProjectLinks] = useState([]);
   const [contactFilter, setContactFilter] = useState('');
-  const [selectedContactIds, setSelectedContactIds] = useState([]);
+  const [selectedContactIds, setSelectedContactIds] = useState(draft.selectedContactIds || []);
 
-  const [audienceMode, setAudienceMode] = useState('contacts');
-  const [manualClients, setManualClients] = useState([]);
-  const [customRangeStart, setCustomRangeStart] = useState('');
-  const [customRangeEnd, setCustomRangeEnd] = useState('');
+  const [audienceMode, setAudienceMode] = useState(draft.audienceMode || 'contacts');
+  const [manualClients, setManualClients] = useState(draft.manualClients || []);
+  const [customRangeStart, setCustomRangeStart] = useState(draft.customRangeStart || '');
+  const [customRangeEnd, setCustomRangeEnd] = useState(draft.customRangeEnd || '');
   // Once the user edits either field by hand, stop auto-filling the
   // suggested range on top of them.
-  const [rangeTouched, setRangeTouched] = useState(false);
+  const [rangeTouched, setRangeTouched] = useState(draft.rangeTouched || false);
   const [campaignLimits, setCampaignLimits] = useState({
     maxRecipientsPerCampaign: MAX_RECIPIENTS_PER_CAMPAIGN,
     dailyLimit: DAILY_RECIPIENT_LIMIT,
@@ -193,6 +205,32 @@ export default function CreateCampaign() {
       .catch(() => setSender(null));
   }, [loadTemplates, loadContacts, loadCampaignLimits]);
 
+  // Keeps the whole wizard resumable across a redirect to My Resume or the
+  // Template Editor — see the draftRef read above for the matching restore.
+  useEffect(() => {
+    saveCampaignDraft({
+      step,
+      form,
+      audienceMode,
+      manualClients,
+      selectedContactIds,
+      customRangeStart,
+      customRangeEnd,
+      rangeTouched,
+    });
+  }, [step, form, audienceMode, manualClients, selectedContactIds, customRangeStart, customRangeEnd, rangeTouched]);
+
+  // Picked up after "Open the full Template Editor" sends the user there and
+  // back with a freshly generated/edited template (see the Content step and
+  // TemplateEditor.jsx's returnTo handling).
+  useEffect(() => {
+    const newTemplateId = location.state?.newTemplateId;
+    if (!newTemplateId || !templates.length) return;
+    applyTemplate(String(newTemplateId));
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, templates]);
+
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
@@ -205,22 +243,22 @@ export default function CreateCampaign() {
     const tpl = templates.find((t) => String(t._id) === templateId);
     if (!tpl) return;
 
-    // Step 1 already requires a non-empty subject before the user can even
-    // reach this step, so by the time a template is picked here, form.subject
-    // is always something the user was forced to type themselves — never a
-    // leftover default. Overwriting it silently discarded that every time a
-    // template was applied. Body still comes from the template (that's the
-    // actual point of picking one); the subject stays exactly as typed until
-    // the user changes it themselves, with the template's own subject offered
-    // as a one-click suggestion instead of a silent overwrite.
+    // The campaign's own subject is now set on the Campaign step, which comes
+    // AFTER this one — so the common case here is form.subject still being
+    // empty, and there's nothing to protect by leaving it blank. Fill it
+    // directly in that case. Once the user has actually typed a subject,
+    // picking a different template no longer overwrites it silently — the
+    // template's own subject is offered as a one-click suggestion instead.
+    const subjectIsEmpty = !form.subject.trim();
     setForm((f) => ({
       ...f,
       selectedTemplateId: templateId,
       body: tpl.body || '',
+      ...(subjectIsEmpty && tpl.subject ? { subject: tpl.subject } : {}),
     }));
     setBodyView('edit');
 
-    if (tpl.subject && tpl.subject.trim() !== form.subject.trim()) {
+    if (!subjectIsEmpty && tpl.subject && tpl.subject.trim() !== form.subject.trim()) {
       toast.info(
         <span>
           Kept your subject line. This template's own subject is{' '}
@@ -299,7 +337,6 @@ export default function CreateCampaign() {
   }, [filteredContacts, selectedContactIds]);
 
   function toggleContact(contactId) {
-    setSelectedContactBatch('');
     setSelectedContactIds((current) =>
       current.includes(contactId)
         ? current.filter((id) => id !== contactId)
@@ -456,7 +493,7 @@ export default function CreateCampaign() {
         : '';
 
   useEffect(() => {
-    if (step !== 2) return;
+    if (step !== 1) return;
 
     if (campaignLimitExceeded) {
       toast.error('❌ Max 100 recipients per campaign', {
@@ -548,6 +585,7 @@ export default function CreateCampaign() {
         ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
       });
 
+      clearCampaignDraft();
       navigate(`/app/campaigns/${campaignId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -562,18 +600,18 @@ export default function CreateCampaign() {
 
   const canNext =
     step === 1
-      ? form.name.trim() && form.subject.trim()
+      ? hasAudienceInput && !audienceLimitError
       : step === 2
-        ? hasAudienceInput && !audienceLimitError
+        ? form.body.trim().length > 0
         : step === 3
-          ? form.body.trim().length > 0
+          ? form.name.trim() && form.subject.trim()
           : step === 4
             ? previewRecipients.length > 0
             : true;
 
   function handleNextStep() {
     setError('');
-    if (step === 2) {
+    if (step === 1) {
       if (campaignLimitExceeded) {
         toast.error('❌ Max 100 recipients per campaign', {
           toastId: 'campaign-limit-max-100',
@@ -638,17 +676,17 @@ export default function CreateCampaign() {
             title={`Step ${step} - ${steps[step - 1].title}`}
             description={
               step === 1
-                ? 'Give the campaign a private name, then write the subject line recipients will actually see.'
+                ? 'Choose audience source: saved contacts or add new clients.'
                 : step === 2
-                  ? 'Choose audience source: saved contacts or add new clients.'
+                  ? 'Use placeholders like {{name}}, {{first_name}}, and {{email}} in your subject or body.'
                   : step === 3
-                    ? 'Use placeholders like {{name}}, {{first_name}}, and {{email}} in your subject or body.'
+                    ? 'Give the campaign a private name, then write the subject line recipients will actually see.'
                     : step === 4
                       ? 'Review header, content, and receiver list before sending.'
                       : 'Send immediately or schedule. Jobs are queued on the server.'
             }
             action={
-              step === 2 ? (
+              step === 1 ? (
                 <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-right text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
                   <p className="font-semibold">🚀 Campaign Limits</p>
                   <p>Max: 100 per campaign • 450/day</p>
@@ -663,7 +701,7 @@ export default function CreateCampaign() {
             </div>
           )}
 
-          {step === 1 && (
+          {step === 3 && (
             <div className="space-y-5">
               <div className="rounded-xl border border-surface-border bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/40">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sending as</p>
@@ -715,7 +753,7 @@ export default function CreateCampaign() {
             </div>
           )}
 
-          {step === 2 && (
+          {step === 1 && (
             <div className="space-y-5">
               {(audienceLimitError || selectedRecipientsCount > 0) && (
                 <div className={cn(
@@ -930,7 +968,7 @@ export default function CreateCampaign() {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 2 && (
             <div className="space-y-4">
               <div>
                 <Label htmlFor="template">Template (optional)</Label>
@@ -956,6 +994,17 @@ export default function CreateCampaign() {
                     Templates
                   </Link>
                   . Use placeholders like <span className="font-medium">{'{{name}}'}</span>, <span className="font-medium">{'{{first_name}}'}</span>, and <span className="font-medium">{'{{email}}'}</span> in subject or body.
+                </p>
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Want AI to draft it from a job description, or refine it by chatting?{' '}
+                  <Link
+                    to="/app/templates/new"
+                    state={{ returnTo: '/app/campaigns/new' }}
+                    className="font-medium text-brand-600 hover:text-brand-700"
+                  >
+                    Open the full Template Editor
+                  </Link>{' '}
+                  — you'll come right back here with it applied.
                 </p>
               </div>
               <div>
@@ -998,7 +1047,11 @@ export default function CreateCampaign() {
                     {hasProjectsBlock(form.body) ? 'Update project links' : 'Insert project links'}
                   </Button>
                   {(!hasAnyProfileLink || !projectLinks.length) && (
-                    <Link to="/app/resume" className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-300">
+                    <Link
+                      to="/app/resume"
+                      state={{ returnTo: '/app/campaigns/new' }}
+                      className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-300"
+                    >
                       Add links under My Resume
                     </Link>
                   )}
@@ -1121,7 +1174,11 @@ export default function CreateCampaign() {
               ) : (
                 <p className="rounded-xl border border-dashed border-surface-border p-4 text-xs text-app-muted">
                   No resume on file, so nothing will be attached.{' '}
-                  <Link to="/app/resume" className="font-medium text-primary hover:underline">
+                  <Link
+                    to="/app/resume"
+                    state={{ returnTo: '/app/campaigns/new' }}
+                    className="font-medium text-primary hover:underline"
+                  >
                     Add one
                   </Link>{' '}
                   to enable this.

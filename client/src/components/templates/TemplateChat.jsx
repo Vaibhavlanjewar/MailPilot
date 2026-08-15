@@ -114,27 +114,36 @@ export default function TemplateChat({ getSubject, getBody, onApply }) {
         <div ref={endRef} />
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          ask(input);
-        }}
-        className="mt-3 flex gap-2"
-      >
+      {/*
+        Deliberately a <div>, not a <form>: this panel is always mounted
+        inside the template's own save <form> (TemplateEditor / CreateCampaign),
+        and a nested <form> is invalid HTML — its submit event still bubbles
+        to the outer form's onSubmit, which silently triggered "Save Template"
+        (and navigated away) every time a chat message was sent, before the
+        AI's reply could ever be applied. Enter-to-send is handled directly
+        on the input instead of via native form submission.
+      */}
+      <div className="mt-3 flex gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            ask(input);
+          }}
           placeholder="e.g. Make the second paragraph more concise"
           className="flex-1 rounded-lg border border-input-border bg-transparent px-3 py-2 text-xs text-app outline-none focus:border-primary"
         />
         <button
-          type="submit"
+          type="button"
+          onClick={() => ask(input)}
           disabled={!input.trim() || sending}
           className="rounded-lg bg-app-gradient px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
         >
           Send
         </button>
-      </form>
+      </div>
     </div>
   );
 }

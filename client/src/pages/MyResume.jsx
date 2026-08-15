@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 import { extractTextFromFile, ACCEPTED_RESUME_TYPES } from '../services/documentText';
@@ -23,6 +23,8 @@ function fileToBase64(file) {
 }
 
 export default function MyResume() {
+  const location = useLocation();
+  const returnTo = location.state?.returnTo || '';
   const [resume, setResume] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -197,6 +199,14 @@ export default function MyResume() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+      {returnTo ? (
+        <Link
+          to={returnTo}
+          className="inline-flex items-center text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          {'<- Back to your campaign draft'}
+        </Link>
+      ) : null}
       <div className="rounded-2xl bg-gradient-to-r from-indigo-700 via-blue-600 to-cyan-600 p-6 text-white shadow-lg md:p-8">
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">My Resume</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100 md:text-base">

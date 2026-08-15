@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import Card, { CardHeader } from "../components/ui/Card";
 import Button from "../components/ui/Button";
@@ -14,7 +14,12 @@ import { api } from "../services/api";
 export default function TemplateEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEdit = Boolean(id);
+  // Set when this page was opened from the campaign wizard's Content step —
+  // saving (or cancelling) sends the user back there instead of to the plain
+  // Templates list, with the campaign draft still intact (see campaignDraft.js).
+  const returnTo = location.state?.returnTo || "";
 
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
@@ -159,6 +164,7 @@ export default function TemplateEditor() {
     setError("");
 
     try {
+      let savedId = id;
       if (isEdit) {
         await api.patch(`/templates/${id}`, {
           name: name.trim(),
@@ -166,13 +172,19 @@ export default function TemplateEditor() {
           body: body.trim(),
         });
       } else {
-        await api.post("/templates", {
+        const { data } = await api.post("/templates", {
           name: name.trim(),
           subject: subject.trim(),
           body: body.trim(),
         });
+        savedId = data?.template?._id;
       }
-      navigate("/app/templates");
+
+      if (returnTo) {
+        navigate(returnTo, { state: { newTemplateId: savedId } });
+      } else {
+        navigate("/app/templates");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save template");
     } finally {
@@ -185,11 +197,17 @@ export default function TemplateEditor() {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <Link
-        to="/app/templates"
+        to={returnTo || "/app/templates"}
         className="text-sm font-medium text-brand-600 hover:text-brand-700"
       >
-        {"<- Back to templates"}
+        {returnTo ? "<- Back to campaign draft" : "<- Back to templates"}
       </Link>
+
+      {returnTo ? (
+        <div className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-2 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-200">
+          Editing for your campaign draft — saving will take you back and apply this template.
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-900">
@@ -415,7 +433,7 @@ export default function TemplateEditor() {
             <Button type="submit" disabled={saving}>
               {saving ? "Saving..." : "Save Template"}
             </Button>
-            <Link to="/app/templates">
+            <Link to={returnTo || "/app/templates"}>
               <Button type="button" variant="secondary" disabled={saving}>
                 Cancel
               </Button>
