@@ -2,9 +2,34 @@ import mongoose from 'mongoose';
 import validator from 'validator';
 import { Contact } from '../models/Contact.js';
 import { ContactImport } from '../models/ContactImport.js';
+import { Campaign } from '../models/Campaign.js';
+import { EmailLog } from '../models/EmailLog.js';
 import { AppError } from '../utils/AppError.js';
 import { parseContactsCsv } from '../utils/csvParser.js';
 import { logger } from '../utils/logger.js';
+
+/**
+ * Contact IDs this user has already reached — sent, or actively queued right
+ * now — across every one of their campaigns. This is what the campaign
+ * wizard's range picker uses to suggest "start after whoever you already
+ * emailed" instead of a raw position number, which drifts the moment the
+ * contact list changes (a CSV replace, a new contact added ahead of others
+ * alphabetically) and would otherwise silently point at the wrong person.
+ *
+ * 'failed' is deliberately excluded: nothing was actually delivered, so that
+ * contact hasn't really been "reached" and shouldn't be treated as done.
+ */
+async function getAlreadyContactedIdSet(userId) {
+  const campaignIds = await Campaign.find({ userId }).distinct('_id');
+  if (!campaignIds.length) return new Set();
+
+  const contactIds = await EmailLog.find({
+    campaignId: { $in: campaignIds },
+    status: { $in: ['sent', 'queued'] },
+  }).distinct('contactId');
+
+  return new Set(contactIds.map((id) => String(id)));
+}
 
 export async function bulkContacts(req, res, next) {
   try {
@@ -147,9 +172,10 @@ export async function bulkContacts(req, res, next) {
 
 export async function listContacts(req, res, next) {
   try {
-    const list = await Contact.find({ userId: req.userId })
-      .sort({ email: 1 })
-      .lean();
+    const [list, contactedIds] = await Promise.all([
+      Contact.find({ userId: req.userId }).sort({ email: 1 }).lean(),
+      getAlreadyContactedIdSet(req.userId),
+    ]);
 
     res.json({
       contacts: list.map((c) => ({
@@ -158,6 +184,7 @@ export async function listContacts(req, res, next) {
         name: c.name || '',
         company: c.company || '',
         subscribed: c.subscribed !== false,
+        alreadyContacted: contactedIds.has(c._id.toString()),
       })),
     });
   } catch (err) {

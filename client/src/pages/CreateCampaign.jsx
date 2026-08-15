@@ -37,8 +37,6 @@ const emptyManualClient = () => ({
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_RECIPIENTS_PER_CAMPAIGN = 100;
 const DAILY_RECIPIENT_LIMIT = 450;
-const CONTACT_BATCH_SIZE = 100;
-const CUSTOM_BATCH_VALUE = '__custom_range__';
 
 function normalizeEmail(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -109,9 +107,11 @@ export default function CreateCampaign() {
 
   const [audienceMode, setAudienceMode] = useState('contacts');
   const [manualClients, setManualClients] = useState([]);
-  const [selectedContactBatch, setSelectedContactBatch] = useState('');
   const [customRangeStart, setCustomRangeStart] = useState('');
   const [customRangeEnd, setCustomRangeEnd] = useState('');
+  // Once the user edits either field by hand, stop auto-filling the
+  // suggested range on top of them.
+  const [rangeTouched, setRangeTouched] = useState(false);
   const [campaignLimits, setCampaignLimits] = useState({
     maxRecipientsPerCampaign: MAX_RECIPIENTS_PER_CAMPAIGN,
     dailyLimit: DAILY_RECIPIENT_LIMIT,
@@ -355,56 +355,82 @@ export default function CreateCampaign() {
     [previewRecipients],
   );
 
-  const contactBatchOptions = useMemo(() => {
-    const options = [];
-    for (let start = 0; start < activeContacts.length; start += CONTACT_BATCH_SIZE) {
-      const endExclusive = Math.min(start + CONTACT_BATCH_SIZE, activeContacts.length);
-      const startLabel = start + 1;
-      const endLabel = endExclusive;
-      options.push({
-        value: `${startLabel}-${endLabel}`,
-        label: `${startLabel}-${endLabel}`,
-        ids: activeContacts.slice(start, endExclusive).map((contact) => contact.id),
-      });
-    }
-    return options;
-  }, [activeContacts]);
+  // "Position 431" only means the same thing tomorrow if the list hasn't
+  // changed — a CSV replace or a new contact added ahead of others
+  // alphabetically silently shifts every index after it. Suggesting a range
+  // by who's actually already been contacted (real send history, not a
+  // remembered number) can't drift that way.
+  const firstUncontactedIndex = useMemo(
+    () => activeContacts.findIndex((c) => !c.alreadyContacted),
+    [activeContacts],
+  );
+  const contactedCount = useMemo(
+    () => activeContacts.filter((c) => c.alreadyContacted).length,
+    [activeContacts],
+  );
 
-  function selectContactBatch(value) {
-    setSelectedContactBatch(value);
-    if (value === CUSTOM_BATCH_VALUE) {
-      setSelectedContactIds([]);
-      return;
-    }
-    if (!value) return;
-    const batch = contactBatchOptions.find((option) => option.value === value);
-    if (!batch) return;
-    setSelectedContactIds(batch.ids);
-    setError('');
+  const suggestedRange = useMemo(() => {
+    if (firstUncontactedIndex === -1 || !activeContacts.length) return null;
+    const start = firstUncontactedIndex + 1; // 1-based, matches what's shown in the list
+    const capByCampaign = start + campaignLimits.maxRecipientsPerCampaign - 1;
+    const capByDailyRemaining = start + Math.max(0, campaignLimits.remainingToday) - 1;
+    const end = Math.min(activeContacts.length, capByCampaign, capByDailyRemaining);
+    if (end < start) return null; // no daily allowance left to suggest anything
+    return { start, end };
+  }, [firstUncontactedIndex, activeContacts.length, campaignLimits.maxRecipientsPerCampaign, campaignLimits.remainingToday]);
+
+  // Pre-fills the moment contacts/limits are known, and again any time the
+  // suggestion changes — but only while the user hasn't typed over it
+  // themselves.
+  useEffect(() => {
+    if (rangeTouched || !suggestedRange) return;
+    setCustomRangeStart(String(suggestedRange.start));
+    setCustomRangeEnd(String(suggestedRange.end));
+  }, [rangeTouched, suggestedRange]);
+
+  function editRangeStart(value) {
+    setRangeTouched(true);
+    setCustomRangeStart(value);
+  }
+  function editRangeEnd(value) {
+    setRangeTouched(true);
+    setCustomRangeEnd(value);
+  }
+  function resetRangeToSuggestion() {
+    setRangeTouched(false); // lets the effect above refill it
   }
 
+  const parsedRangeStart = Number.parseInt(customRangeStart, 10);
+  const parsedRangeEnd = Number.parseInt(customRangeEnd, 10);
+  const rangeCount =
+    Number.isFinite(parsedRangeStart) && Number.isFinite(parsedRangeEnd) && parsedRangeEnd >= parsedRangeStart
+      ? parsedRangeEnd - parsedRangeStart + 1
+      : null;
+  const rangeExceedsDaily = rangeCount !== null && rangeCount > campaignLimits.remainingToday;
+  const rangeExceedsCampaignMax = rangeCount !== null && rangeCount > campaignLimits.maxRecipientsPerCampaign;
+
   function applyCustomRange() {
-    const start = Number.parseInt(customRangeStart, 10);
-    const end = Number.parseInt(customRangeEnd, 10);
+    const start = parsedRangeStart;
+    const end = parsedRangeEnd;
 
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       toast.error('Enter valid start and end numbers');
       return;
     }
-
     if (start < 1 || end < 1 || start > end) {
       toast.error('Invalid range. Use start <= end and values >= 1');
       return;
     }
-
     if (end > activeContacts.length) {
       toast.error(`Range end cannot exceed ${activeContacts.length}`);
       return;
     }
-
-    const count = end - start + 1;
-    if (count > CONTACT_BATCH_SIZE) {
-      toast.error('Custom range cannot be more than 100 contacts');
+    if (rangeExceedsCampaignMax) {
+      toast.error(`A single campaign can't exceed ${campaignLimits.maxRecipientsPerCampaign} recipients`);
+      return;
+    }
+    if (rangeExceedsDaily) {
+      toast.error(`That's more than the ${campaignLimits.remainingToday} sends you have left today`);
       return;
     }
 
@@ -752,56 +778,66 @@ export default function CreateCampaign() {
                       <Input id="contactFilter" value={contactFilter} onChange={(e) => setContactFilter(e.target.value)} placeholder="Search by name or email" />
                     </div>
 
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm text-slate-500">
-                        {selectedContactIds.length} selected of {filteredContacts.length} visible
-                      </p>
-                      <div className="w-full max-w-[220px]">
-                        <Select
-                          id="contactBatch"
-                          value={selectedContactBatch}
-                          onChange={(e) => selectContactBatch(e.target.value)}
-                          disabled={!contactBatchOptions.length}
-                        >
-                          <option value="">Select client batch</option>
-                          {contactBatchOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                          <option value={CUSTOM_BATCH_VALUE}>Custom range</option>
-                        </Select>
-                      </div>
-                    </div>
+                    <p className="text-sm text-slate-500">
+                      {selectedContactIds.length} selected of {filteredContacts.length} visible
+                    </p>
 
-                    {selectedContactBatch === CUSTOM_BATCH_VALUE && (
-                      <div className="rounded-xl border border-surface-border bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-                        <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">
-                          Enter custom range (max 100 contacts)
+                    <div className="rounded-xl border border-surface-border bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm text-slate-600 dark:text-slate-300">
+                          {contactedCount > 0
+                            ? `${contactedCount} of ${activeContacts.length} contacts already emailed.`
+                            : `None of your ${activeContacts.length} contacts have been emailed yet.`}
                         </p>
-                        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-                          <Input
-                            type="number"
-                            min={1}
-                            max={activeContacts.length || 1}
-                            placeholder="Start (e.g. 101)"
-                            value={customRangeStart}
-                            onChange={(e) => setCustomRangeStart(e.target.value)}
-                          />
-                          <Input
-                            type="number"
-                            min={1}
-                            max={activeContacts.length || 1}
-                            placeholder="End (e.g. 180)"
-                            value={customRangeEnd}
-                            onChange={(e) => setCustomRangeEnd(e.target.value)}
-                          />
-                          <Button type="button" variant="secondary" onClick={applyCustomRange}>
-                            Apply
-                          </Button>
-                        </div>
+                        {rangeTouched && suggestedRange && (
+                          <button
+                            type="button"
+                            onClick={resetRangeToSuggestion}
+                            className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-300"
+                          >
+                            Reset to next {suggestedRange.end - suggestedRange.start + 1} unsent
+                          </button>
+                        )}
                       </div>
-                    )}
+
+                      <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={activeContacts.length || 1}
+                          placeholder="Start (e.g. 431)"
+                          value={customRangeStart}
+                          onChange={(e) => editRangeStart(e.target.value)}
+                        />
+                        <Input
+                          type="number"
+                          min={1}
+                          max={activeContacts.length || 1}
+                          placeholder="End (e.g. 530)"
+                          value={customRangeEnd}
+                          onChange={(e) => editRangeEnd(e.target.value)}
+                        />
+                        <Button type="button" variant="secondary" onClick={applyCustomRange}>
+                          Use this range
+                        </Button>
+                      </div>
+
+                      {rangeCount !== null && (
+                        <p
+                          className={cn(
+                            'mt-2 text-xs',
+                            rangeExceedsDaily || rangeExceedsCampaignMax ? 'font-medium text-rose-600 dark:text-rose-400' : 'text-slate-500',
+                          )}
+                        >
+                          {rangeCount} contact{rangeCount === 1 ? '' : 's'}
+                          {rangeExceedsCampaignMax
+                            ? ` — over the ${campaignLimits.maxRecipientsPerCampaign}-per-campaign limit`
+                            : rangeExceedsDaily
+                              ? ` — only ${campaignLimits.remainingToday} sends left today`
+                              : ` • ${campaignLimits.remainingToday} sends left today`}
+                        </p>
+                      )}
+                    </div>
 
                     <div className="max-h-80 overflow-auto rounded-xl border border-surface-border bg-slate-50/70 p-2 dark:border-slate-700 dark:bg-slate-950/40">
                       {contactsLoading ? (
@@ -840,6 +876,7 @@ export default function CreateCampaign() {
                                       {contact.name || 'Unnamed contact'}
                                     </span>
                                     {contact.name ? <Badge variant="active">Named</Badge> : <Badge variant="inactive">No name</Badge>}
+                                    {contact.alreadyContacted && <Badge variant="inactive">Already emailed</Badge>}
                                   </div>
                                   <p className="mt-0.5 truncate text-sm text-slate-600 dark:text-slate-300">{contact.email}</p>
                                 </div>
