@@ -45,7 +45,24 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      theme={navTheme}
+      linking={{
+        prefixes: ['jobpilot://'],
+        // Only matches once AppDrawer is mounted (post-login) — an
+        // unauthenticated tap just opens the app to the login screen instead
+        // of crashing, since Login/Register/ForgotPassword have no matching path.
+        config: {
+          screens: {
+            MockInterviewLobby: {
+              screens: {
+                MockInterviewRoom: 'mock-interview/:code',
+              },
+            },
+          },
+        },
+      }}
+    >
       {isAuthenticated ? <AppDrawer /> : <AuthNavigator />}
     </NavigationContainer>
   );

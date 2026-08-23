@@ -52,6 +52,10 @@ function rateConnection({ rtt, loss }) {
   return { label: 'Poor', bars: 1, tone: 'text-rose-500' };
 }
 
+function isAndroid() {
+  return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+}
+
 function formatDuration(totalSeconds) {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
@@ -698,6 +702,18 @@ export default function MockInterviewRoom() {
           Copy invite link
         </button>
       </div>
+
+      {isAndroid() && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-app">
+          <span>Have the JobPilot app installed? Join there instead.</span>
+          <a
+            href={`jobpilot://mock-interview/${code}`}
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+          >
+            Open in app
+          </a>
+        </div>
+      )}
 
       {status === 'scheduled' && pendingInfo && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-6 text-center text-sm text-app">

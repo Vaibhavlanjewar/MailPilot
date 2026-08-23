@@ -115,8 +115,15 @@ services:
       # falls through past it.
       - key: GOOGLE_API_KEY
         sync: false
+      # gemini-2.0-flash (the code default) was retired by Google — pin the
+      # replacement explicitly so it survives even if this var is ever unset.
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
       - key: GROQ_API
         sync: false
+      # llama-3.3-70b-versatile (the code default) was decommissioned by Groq.
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
       - key: LANGSMITH_TRACING
         value: "false"
       - key: LANGSMITH_API_KEY
