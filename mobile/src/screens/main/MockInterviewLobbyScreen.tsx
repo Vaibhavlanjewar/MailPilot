@@ -151,8 +151,7 @@ export default function MockInterviewLobbyScreen() {
           recorded or stored.
         </Text>
         <Text style={styles.note}>
-          The in-call video screen needs a native WebRTC module that isn't wired up on mobile yet
-          — scheduling and room management work fully, joining a call currently only works on web.
+          Uses your device's camera and microphone — you'll be asked to allow access when you join.
         </Text>
 
         <View style={styles.actionsRow}>

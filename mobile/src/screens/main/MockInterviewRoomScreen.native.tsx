@@ -109,6 +109,7 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [quality, setQuality] = useState<{ label: string; bars: number; color: string } | null>(null);
+  const [joinUrl, setJoinUrl] = useState('');
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<any>(null);
@@ -122,8 +123,6 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
   const recoveryAttemptsRef = useRef(0);
   const sessionIdRef = useRef(0);
   const createPeerConnectionRef = useRef<() => any>(() => null);
-
-  const shareUrl = `jobpilot://mock-interview/${code}`;
 
   const cleanup = useCallback(() => {
     clearTimeout(connectTimeoutRef.current);
@@ -235,6 +234,8 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
       try {
         const room = await api.get(`/mock-interview/rooms/${code}`);
         if (sessionIdRef.current !== mySession) return;
+
+        if (room.data.room.joinUrl) setJoinUrl(room.data.room.joinUrl);
 
         if (!room.data.room.canJoinNow) {
           setPendingInfo({ title: room.data.room.title, joinOpensAt: room.data.room.joinOpensAt });
@@ -476,8 +477,9 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
   }
 
   async function copyLink() {
-    await Clipboard.setStringAsync(shareUrl);
-    Toast.show({ type: 'success', text1: 'Room code link copied.' });
+    if (!joinUrl) return;
+    await Clipboard.setStringAsync(joinUrl);
+    Toast.show({ type: 'success', text1: 'Link copied.' });
   }
 
   return (
