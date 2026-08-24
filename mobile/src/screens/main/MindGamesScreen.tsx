@@ -179,10 +179,13 @@ function VsCandidate() {
     }
   }
 
-  async function copyLink() {
-    const shareUrl = `jobpilot://mind-games?game=${roomCode}`;
-    await Clipboard.setStringAsync(shareUrl);
-    Toast.show({ type: 'success', text1: 'Room code link copied.' });
+  // Copies the bare code, not a jobpilot:// URL — that scheme has no route
+  // registered for mind-games, so a "link" built from it opened nothing at
+  // all. The code pastes straight into the "enter a game code" field below,
+  // which is the join path that actually works.
+  async function copyCode() {
+    await Clipboard.setStringAsync(roomCode);
+    Toast.show({ type: 'success', text1: 'Game code copied — send it to your opponent.' });
   }
 
   if (!joined) {
@@ -223,7 +226,7 @@ function VsCandidate() {
     <View style={{ alignItems: 'center' }}>
       <View style={styles.roomRow}>
         <Text style={styles.roomCode}>{roomCode}</Text>
-        <SecondaryButton title="Copy link" onPress={copyLink} />
+        <SecondaryButton title="Copy code" onPress={copyCode} />
         <SecondaryButton
           title="Leave"
           onPress={() => {
