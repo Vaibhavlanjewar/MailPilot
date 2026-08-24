@@ -17,6 +17,7 @@ import {
   updateProfile,
   User as FirebaseUser,
 } from 'firebase/auth';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { auth, firebaseConfigError } from '../services/firebase';
 import api, { setAuthToken, USER_KEY } from '../services/api';
 
@@ -112,6 +113,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     if (auth) await signOut(auth);
+    // Play Services caches the chosen Google account independently of
+    // Firebase, so without this the next "Continue with Google" silently
+    // reuses the account that just logged out — no picker, no way to switch.
+    try {
+      await GoogleSignin.signOut();
+    } catch {
+      // Never signed in with Google (or Play Services missing) — nothing to clear.
+    }
     await clearSession();
     setUser(null);
   }, []);

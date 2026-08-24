@@ -1,81 +1,96 @@
-import { useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import { Platform } from 'react-native';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
-
-WebBrowser.maybeCompleteAuthSession();
-
-const PLACEHOLDER = 'unconfigured.apps.googleusercontent.com';
+import {
+  GoogleSignin,
+  isErrorWithCode,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 
 const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
-/**
- * expo-auth-session requires a *platform-specific* client ID on native —
- * androidClientId on Android, iosClientId on iOS — and only falls back to
- * webClientId on web itself. Passing just webClientId (which is all that
- * was configured) throws synchronously on native with "Client Id property
- * `androidClientId` must be defined to use Google auth on this platform" —
- * and since that throw happens while rendering the Login screen, it crashed
- * the entire app on launch, before any UI could show.
- */
-const REQUIRED_CLIENT_ID = Platform.select({
-  android: ANDROID_CLIENT_ID,
-  ios: IOS_CLIENT_ID,
-  default: WEB_CLIENT_ID,
-});
-
-export const googleSignInConfigError = REQUIRED_CLIENT_ID
+export const googleSignInConfigError = WEB_CLIENT_ID
   ? null
-  : `Google sign-in is not configured for ${Platform.OS}. Set EXPO_PUBLIC_GOOGLE_${Platform.OS === 'android' ? 'ANDROID' : Platform.OS === 'ios' ? 'IOS' : 'WEB'}_CLIENT_ID in mobile/.env (and on EAS) and rebuild.`;
+  : 'Google sign-in is not configured. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in mobile/.env (and on EAS) and rebuild.';
 
 /**
- * On Android, expo-auth-session defaults the OAuth redirect to
- * `<applicationId>:/oauthredirect` (the app's own package name as the
- * custom scheme). Google's Android-type OAuth clients don't recognize
- * that — they expect the reversed-client-id scheme Google itself assigns
- * (`com.googleusercontent.apps.<client-id-prefix>`). Sending the wrong
- * one doesn't produce a redirect_uri_mismatch — Google rejects the whole
- * authorization request outright ("Access blocked ... invalid_request"),
- * since it can't recognize this client-id/redirect-uri pair at all. Must
- * match the scheme registered in app.json's `expo.scheme` array.
+ * Native Google Sign-In (Play Services) rather than the browser-based
+ * expo-auth-session flow this used to run.
+ *
+ * The browser flow redirected through a custom URI scheme, and Google now
+ * rejects that for Android OAuth clients outright — "Access blocked ...
+ * Custom URI scheme is not enabled for your Android client" — a project-level
+ * policy no app-side redirect config can satisfy. Play Services never leaves
+ * the app, so there is no redirect URI to be blocked.
+ *
+ * `webClientId` is deliberately the *web* client, not the Android one: it sets
+ * the audience of the returned ID token, and Firebase only accepts tokens
+ * minted for the web client. The Android client still has to exist in the same
+ * GCP project with this app's package name and signing SHA-1 — that is what
+ * authorises the device — but it is never passed here.
  */
-const ANDROID_REVERSED_SCHEME = ANDROID_CLIENT_ID
-  ? `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace(/\.apps\.googleusercontent\.com$/, '')}`
-  : null;
+if (WEB_CLIENT_ID) {
+  GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
+}
 
-/**
- * Wraps expo-auth-session's Google provider so screens only deal with a
- * single onIdToken callback instead of the request/response/prompt trio.
- */
-export function useGoogleAuth(onIdToken: (idToken: string) => void, onError: (message: string) => void) {
-  // A syntactically-valid placeholder on every platform-specific field keeps
-  // the hook from throwing at render time regardless of which are actually
-  // configured; `googleSignInConfigError` is what gates whether promptAsync()
-  // is allowed to actually run.
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(
-    {
-      webClientId: WEB_CLIENT_ID || PLACEHOLDER,
-      androidClientId: ANDROID_CLIENT_ID || PLACEHOLDER,
-      iosClientId: IOS_CLIENT_ID || PLACEHOLDER,
-    },
-    Platform.OS === 'android' && ANDROID_REVERSED_SCHEME
-      ? { native: `${ANDROID_REVERSED_SCHEME}:/oauthredirect` }
-      : {}
-  );
-
-  useEffect(() => {
-    if (response?.type === 'success' && response.params?.id_token) {
-      onIdToken(response.params.id_token);
-    } else if (response?.type === 'error') {
-      onError(response.error?.message || 'Google sign-in failed.');
+function describeError(err: unknown): string {
+  if (isErrorWithCode(err)) {
+    switch (err.code) {
+      case statusCodes.SIGN_IN_CANCELLED:
+        return '';
+      case statusCodes.IN_PROGRESS:
+        return 'A sign-in is already in progress.';
+      case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
+        return 'Google Play Services is unavailable or out of date on this device.';
+      default:
+        break;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [response]);
+  }
+  return err instanceof Error ? err.message : 'Google sign-in failed.';
+}
+
+/**
+ * Wraps the sign-in call so screens only deal with a single onIdToken
+ * callback instead of driving the SDK themselves. Keeps the same shape the
+ * expo-auth-session version exposed, so the calling screens are unchanged.
+ */
+export function useGoogleAuth(
+  onIdToken: (idToken: string) => void,
+  onError: (message: string) => void
+) {
+  const [busy, setBusy] = useState(false);
+
+  const promptAsync = useCallback(async () => {
+    if (googleSignInConfigError) {
+      onError(googleSignInConfigError);
+      return;
+    }
+    setBusy(true);
+    try {
+      if (Platform.OS === 'android') {
+        // Surfaces the "update Play Services" prompt instead of failing with
+        // an opaque native error on devices where it's missing or stale.
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      }
+
+      const response = await GoogleSignin.signIn();
+      if (response.type !== 'success') return; // user dismissed the picker
+
+      const idToken = response.data?.idToken;
+      if (!idToken) {
+        onError('Google did not return an ID token. Check the web client ID configuration.');
+        return;
+      }
+      onIdToken(idToken);
+    } catch (err) {
+      const message = describeError(err);
+      if (message) onError(message); // empty = user cancelled, not worth a toast
+    } finally {
+      setBusy(false);
+    }
+  }, [onIdToken, onError]);
 
   return {
-    ready: Boolean(request) && !googleSignInConfigError,
+    ready: !googleSignInConfigError && !busy,
     promptAsync,
   };
 }

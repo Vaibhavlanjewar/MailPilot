@@ -2,7 +2,7 @@
   "expo": {
     "name": "JobPilot",
     "slug": "jobpilot",
-    "scheme": ["jobpilot", "com.googleusercontent.apps.423779472567-f1i6p7ingn1m0m68f8v8l3c3ansj9540"],
+    "scheme": "jobpilot",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -39,7 +39,8 @@
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-web-browser",
-      "@config-plugins/react-native-webrtc"
+      "@config-plugins/react-native-webrtc",
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "eas": {
