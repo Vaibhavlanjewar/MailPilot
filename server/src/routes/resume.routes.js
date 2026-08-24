@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import validator from 'validator';
+import mammoth from 'mammoth';
+import { PDFParse } from 'pdf-parse';
 import { authenticate } from '../middlewares/auth.js';
 import { Resume } from '../models/Resume.js';
 import {
@@ -51,6 +53,57 @@ function sanitizeProjectLinks(input) {
 }
 
 router.use(authenticate);
+
+/**
+ * Mirrors client/src/services/documentText.js — the web client extracts PDF/DOCX
+ * text in-browser via pdf.js/mammoth (CDN scripts, DOM-only). Mobile has no DOM,
+ * so the same extraction runs here instead, using the equivalent Node packages.
+ */
+router.post('/extract-text', async (req, res, next) => {
+  try {
+    const { fileBase64, fileName = '', mimeType = '' } = req.body || {};
+    if (!fileBase64 || typeof fileBase64 !== 'string') {
+      throw new AppError('fileBase64 is required', 422);
+    }
+
+    const buffer = Buffer.from(fileBase64, 'base64');
+    if (buffer.length > MAX_RESUME_BYTES) {
+      throw new AppError('File exceeds the 2MB limit.', 413);
+    }
+
+    const name = String(fileName).toLowerCase();
+    const isPdf = name.endsWith('.pdf') || mimeType === 'application/pdf';
+    const isDocx =
+      name.endsWith('.docx') ||
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    let content = '';
+    if (isPdf) {
+      const parser = new PDFParse({ data: buffer });
+      try {
+        const parsed = await parser.getText();
+        content = (parsed.text || '').trim();
+      } finally {
+        await parser.destroy();
+      }
+      if (!content) {
+        throw new AppError('No text found — this PDF looks like a scanned image.', 422);
+      }
+    } else if (isDocx) {
+      const { value } = await mammoth.extractRawText({ buffer });
+      content = (value || '').trim();
+      if (!content) {
+        throw new AppError('No text found in this Word document.', 422);
+      }
+    } else {
+      throw new AppError('Unsupported format. Upload a .pdf, .docx, or .txt file.', 422);
+    }
+
+    res.json({ success: true, content });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /** The caller's single resume, or null when they have not added one yet. */
 router.get('/me', async (req, res, next) => {
