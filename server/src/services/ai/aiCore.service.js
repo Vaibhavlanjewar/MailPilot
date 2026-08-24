@@ -2,7 +2,11 @@ import crypto from 'crypto';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+// Defaults must name models that are actually still served. gemini-2.0-flash
+// was retired by Google, and the whole cascade silently collapsed to "no AI
+// provider available" on any deploy that didn't override this — the fallback
+// existing is worthless if it points at something that 404s.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5-coder:0.5b';
 

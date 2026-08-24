@@ -155,7 +155,10 @@ export const env = {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     groqApiKey: process.env.GROQ_API || process.env.GROQ_API_KEY || '',
-    groqModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    // llama-3.3-70b-versatile was decommissioned by Groq; see the GEMINI_MODEL
+    // note in services/ai/aiCore.service.js — a default that 404s is not a
+    // fallback, it's an outage waiting for the next deploy without overrides.
+    groqModel: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
     googleApiKey: process.env.GOOGLE_API_KEY || '',
     langsmith: {
       tracing: process.env.LANGSMITH_TRACING === 'true',
