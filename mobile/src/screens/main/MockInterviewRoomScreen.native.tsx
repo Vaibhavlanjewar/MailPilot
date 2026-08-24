@@ -1,6 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  PermissionsAndroid,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { useKeepAwake } from 'expo-keep-awake';
+import { useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import {
   mediaDevices,
@@ -12,6 +23,7 @@ import {
 } from 'react-native-webrtc';
 import { auth } from '../../services/firebase';
 import api from '../../services/api';
+import { useActiveCall } from '../../context/ActiveCallContext';
 import { colors } from '../../theme/colors';
 
 const FALLBACK_ICE_SERVERS = [
@@ -22,6 +34,7 @@ const FALLBACK_ICE_SERVERS = [
 const CONNECT_TIMEOUT_MS = 20_000;
 const RECONNECT_GRACE_MS = 6_000;
 const MAX_RECOVERY_ATTEMPTS = 3;
+const CONTROLS_HIDE_MS = 5_000;
 
 type Status =
   | 'checking'
@@ -72,23 +85,55 @@ function wsBase() {
 }
 
 /**
+ * Android needs CAMERA and RECORD_AUDIO granted at runtime, not just declared
+ * in the manifest — react-native-webrtc does not prompt on its own, so
+ * getUserMedia would otherwise fail on a real device with a permission error
+ * that reads like a hardware fault. Returns what was actually granted so the
+ * call can still go ahead audio-only (or video-only) rather than refusing to
+ * start because one of the two was declined.
+ */
+async function requestMediaPermissions(): Promise<{ camera: boolean; mic: boolean }> {
+  if (Platform.OS !== 'android') return { camera: true, mic: true };
+  try {
+    const result = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+    ]);
+    return {
+      camera: result[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED,
+      mic: result[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === PermissionsAndroid.RESULTS.GRANTED,
+    };
+  } catch {
+    // Treat a failed prompt as "try anyway" — getUserMedia reports the real
+    // reason, and guessing "denied" here would block a working device.
+    return { camera: true, mic: true };
+  }
+}
+
+/**
  * Some devices reject a combined video+audio request outright even though
  * each works alone (another app holding the mic, a device-specific
  * constraint failure). Falling back preserves at least an audio-only call
  * instead of failing the join entirely.
  */
-async function getBestAvailableStream(): Promise<{ stream: MediaStream; hasVideo: boolean; hasAudio: boolean }> {
-  try {
-    const stream = (await mediaDevices.getUserMedia({ video: true, audio: true })) as unknown as MediaStream;
-    return { stream, hasVideo: true, hasAudio: true };
-  } catch {
-    // fall through
+async function getBestAvailableStream(
+  allowed: { camera: boolean; mic: boolean }
+): Promise<{ stream: MediaStream; hasVideo: boolean; hasAudio: boolean }> {
+  if (allowed.camera && allowed.mic) {
+    try {
+      const stream = (await mediaDevices.getUserMedia({ video: true, audio: true })) as unknown as MediaStream;
+      return { stream, hasVideo: true, hasAudio: true };
+    } catch {
+      // fall through
+    }
   }
-  try {
-    const stream = (await mediaDevices.getUserMedia({ video: false, audio: true })) as unknown as MediaStream;
-    return { stream, hasVideo: false, hasAudio: true };
-  } catch {
-    // fall through
+  if (allowed.mic) {
+    try {
+      const stream = (await mediaDevices.getUserMedia({ video: false, audio: true })) as unknown as MediaStream;
+      return { stream, hasVideo: false, hasAudio: true };
+    } catch {
+      // fall through
+    }
   }
   const stream = (await mediaDevices.getUserMedia({ video: true, audio: false })) as unknown as MediaStream;
   return { stream, hasVideo: true, hasAudio: false };
@@ -96,6 +141,12 @@ async function getBestAvailableStream(): Promise<{ stream: MediaStream; hasVideo
 
 export default function MockInterviewRoomScreen({ route, navigation }: any) {
   const code: string = route.params.code;
+  const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
+  const { setCall, clearCall } = useActiveCall();
+
+  // A call is useless if the screen dims mid-answer.
+  useKeepAwake();
 
   const [status, setStatus] = useState<Status>('checking');
   const [errorMessage, setErrorMessage] = useState('');
@@ -110,6 +161,9 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
   const [elapsed, setElapsed] = useState(0);
   const [quality, setQuality] = useState<{ label: string; bars: number; color: string } | null>(null);
   const [joinUrl, setJoinUrl] = useState('');
+  const [controlsVisible, setControlsVisible] = useState(true);
+  /** Which stream occupies the full-bleed layer; tapping the thumbnail swaps. */
+  const [mainView, setMainView] = useState<'remote' | 'local'>('remote');
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<any>(null);
@@ -123,6 +177,12 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
   const recoveryAttemptsRef = useRef(0);
   const sessionIdRef = useRef(0);
   const createPeerConnectionRef = useRef<() => any>(() => null);
+
+  // The call owns the whole screen, so the stack header would just eat space
+  // and put a second, conflicting back affordance next to the overlay one.
+  useEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, [navigation]);
 
   const cleanup = useCallback(() => {
     clearTimeout(connectTimeoutRef.current);
@@ -208,7 +268,10 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
       }
     };
 
-    localStreamRef.current?.getTracks().forEach((track: any) => pc.addTrack(track, localStreamRef.current));
+    // Captured once: addTrack's second argument is non-nullable, and reading
+    // the ref again inside the callback widens it back to MediaStream | null.
+    const local = localStreamRef.current;
+    if (local) local.getTracks().forEach((track: any) => pc.addTrack(track, local));
     pcRef.current = pc;
     pendingCandidatesRef.current = [];
     remoteStreamRef.current = null;
@@ -256,7 +319,17 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
         }
         if (sessionIdRef.current !== mySession) return;
 
-        const { stream, hasVideo, hasAudio } = await getBestAvailableStream();
+        const allowed = await requestMediaPermissions();
+        if (sessionIdRef.current !== mySession) return;
+        if (!allowed.camera && !allowed.mic) {
+          setStatus('error');
+          setErrorMessage(
+            'Camera and microphone permission were both denied. Allow them in Settings → Apps → JobPilot → Permissions, then rejoin.'
+          );
+          return;
+        }
+
+        const { stream, hasVideo, hasAudio } = await getBestAvailableStream(allowed);
         if (sessionIdRef.current !== mySession) {
           stream.getTracks().forEach((t: any) => t.stop());
           return;
@@ -455,6 +528,13 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
     return () => clearInterval(timer);
   }, [status, startCall]);
 
+  // Controls get out of the way once the call is up, and come back on tap.
+  useEffect(() => {
+    if (status !== 'connected' || !controlsVisible) return undefined;
+    const timer = setTimeout(() => setControlsVisible(false), CONTROLS_HIDE_MS);
+    return () => clearTimeout(timer);
+  }, [status, controlsVisible]);
+
   function toggleMic() {
     const track = localStreamRef.current?.getAudioTracks()[0];
     if (track) {
@@ -471,10 +551,34 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
     }
   }
 
-  function leaveRoom() {
+  const leaveRoom = useCallback(() => {
+    sessionIdRef.current++;
     cleanup();
+    clearCall(code);
     navigation.goBack();
-  }
+  }, [cleanup, clearCall, code, navigation]);
+
+  // Publishes to the floating bubble so wandering off to another screen
+  // doesn't silently strand a live call with no way back to it.
+  useEffect(() => {
+    const live = status === 'connected' || status === 'waiting' || status === 'reconnecting' || status === 'connecting';
+    if (!live) {
+      clearCall(code);
+      return;
+    }
+    setCall({
+      code,
+      label: status === 'connected' && connectedAt ? formatDuration(elapsed) : STATUS_LABEL[status],
+      focused: isFocused,
+      renderThumbnail: remoteStream
+        ? () => <RTCView streamURL={(remoteStream as any).toURL()} style={{ flex: 1 }} objectFit="cover" />
+        : undefined,
+      onReturn: () => navigation.navigate('MockInterviewRoom', { code }),
+      onLeave: leaveRoom,
+    });
+  }, [status, isFocused, elapsed, connectedAt, remoteStream, code, setCall, clearCall, navigation, leaveRoom]);
+
+  useEffect(() => () => clearCall(code), [clearCall, code]);
 
   async function copyLink() {
     if (!joinUrl) return;
@@ -482,80 +586,96 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
     Toast.show({ type: 'success', text1: 'Link copied.' });
   }
 
-  return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-      <View style={styles.headerRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Live Practice Room</Text>
-          <View style={styles.badgeRow}>
-            <Text style={[styles.statusBadge, { color: STATUS_COLOR[status] || colors.textSecondary }]}>
-              {STATUS_LABEL[status]}
-            </Text>
-            {peerName ? <Text style={styles.muted}>with {peerName}</Text> : null}
-            {connectedAt ? <Text style={styles.mono}>{formatDuration(elapsed)}</Text> : null}
-            {quality ? <Text style={[styles.muted, { color: quality.color }]}>{quality.label}</Text> : null}
-          </View>
-        </View>
-        <Pressable onPress={copyLink} style={styles.chipButton}>
-          <Text style={styles.chipButtonText}>Copy link</Text>
+  if (status === 'scheduled' && pendingInfo) {
+    return (
+      <View style={[styles.messageScreen, { paddingTop: insets.top + 24 }]}>
+        <Text style={styles.messageTitle}>{pendingInfo.title || 'This meeting'} hasn't opened yet</Text>
+        <Text style={styles.messageBody}>
+          The room opens 10 minutes before the start time. This screen will move you in automatically.
+        </Text>
+        <Pressable onPress={() => navigation.goBack()} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Back</Text>
         </Pressable>
       </View>
+    );
+  }
 
-      {status === 'scheduled' && pendingInfo ? (
-        <View style={styles.infoBanner}>
-          <Text style={styles.bannerTitle}>{pendingInfo.title || 'This meeting'} hasn't opened yet</Text>
-          <Text style={styles.muted}>
-            The room opens 10 minutes before the start time. This screen will move you in automatically.
-          </Text>
-        </View>
-      ) : null}
+  if (status === 'error') {
+    return (
+      <View style={[styles.messageScreen, { paddingTop: insets.top + 24 }]}>
+        <Text style={[styles.messageTitle, { color: colors.danger }]}>Can't join this room</Text>
+        <Text style={styles.messageBody}>{errorMessage}</Text>
+        <Pressable onPress={() => navigation.goBack()} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
-      {status !== 'scheduled' && status !== 'error' && !devices.hasVideo ? (
-        <View style={styles.warnBanner}>
-          <Text style={styles.body}>No camera found — you've joined with audio only.</Text>
-        </View>
-      ) : null}
+  const showRemoteAsMain = mainView === 'remote';
+  const mainStream = showRemoteAsMain ? remoteStream : localStream;
+  const thumbStream = showRemoteAsMain ? localStream : remoteStream;
+  const thumbIsSelf = showRemoteAsMain;
 
-      {status === 'waiting' ? (
-        <View style={styles.infoBanner}>
-          <Text style={styles.body}>Waiting for the other person to join. Share the invite link above.</Text>
-        </View>
-      ) : null}
-
-      {status === 'reconnecting' ? (
-        <View style={styles.warnBanner}>
-          <Text style={styles.bannerTitle}>Connection dropped — trying to restore it.</Text>
-          <Text style={styles.muted}>Stay on the screen. Short drops usually recover on their own.</Text>
-        </View>
-      ) : null}
-
-      {status === 'error' ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        </View>
-      ) : null}
-
-      {status !== 'scheduled' && (
-        <>
-          <View style={styles.videoTile}>
-            {localStream ? (
-              <RTCView streamURL={(localStream as any).toURL()} style={styles.video} objectFit="cover" mirror />
+  return (
+    <View style={styles.root}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => setControlsVisible((v) => !v)}>
+        {mainStream ? (
+          <RTCView
+            streamURL={(mainStream as any).toURL()}
+            style={StyleSheet.absoluteFill}
+            objectFit="cover"
+            mirror={!showRemoteAsMain}
+          />
+        ) : (
+          <View style={styles.placeholder}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.placeholderText}>
+              {status === 'waiting' ? 'Waiting for the other person to join' : STATUS_LABEL[status]}
+            </Text>
+            {status === 'waiting' && joinUrl ? (
+              <Pressable onPress={copyLink} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Copy invite link</Text>
+              </Pressable>
             ) : null}
-            <Text style={styles.videoLabel}>You</Text>
           </View>
+        )}
+      </Pressable>
 
-          <View style={styles.videoTile}>
-            {remoteStream ? (
-              <RTCView streamURL={(remoteStream as any).toURL()} style={styles.video} objectFit="cover" />
-            ) : (
-              <View style={styles.videoPlaceholder}>
-                <Text style={styles.muted}>{peerName || 'Waiting…'}</Text>
-              </View>
-            )}
-            <Text style={styles.videoLabel}>{peerName || 'Waiting…'}</Text>
+      {thumbStream ? (
+        <Pressable
+          style={[styles.thumb, { top: insets.top + 64 }]}
+          onPress={() => setMainView((v) => (v === 'remote' ? 'local' : 'remote'))}
+        >
+          <RTCView
+            streamURL={(thumbStream as any).toURL()}
+            style={{ flex: 1 }}
+            objectFit="cover"
+            mirror={thumbIsSelf}
+          />
+          <Text style={styles.thumbLabel}>{thumbIsSelf ? 'You' : peerName || 'Them'}</Text>
+        </Pressable>
+      ) : null}
+
+      {controlsVisible ? (
+        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+          <View style={styles.statusPill}>
+            <View style={[styles.dot, { backgroundColor: STATUS_COLOR[status] || colors.textSecondary }]} />
+            <Text style={styles.statusText}>
+              {status === 'connected' && connectedAt ? formatDuration(elapsed) : STATUS_LABEL[status]}
+            </Text>
+            {quality ? <Text style={[styles.qualityText, { color: quality.color }]}>{quality.label}</Text> : null}
           </View>
+          {peerName ? <Text style={styles.peerName}>{peerName}</Text> : null}
+        </View>
+      ) : null}
 
-          <View style={styles.controlsRow}>
+      {controlsVisible ? (
+        <View style={[styles.controls, { paddingBottom: insets.bottom + 20 }]}>
+          {!devices.hasVideo ? (
+            <Text style={styles.audioOnlyNote}>No camera available — you're on audio only.</Text>
+          ) : null}
+          <View style={styles.controlRow}>
             <Pressable
               onPress={toggleMic}
               disabled={!devices.hasAudio}
@@ -570,44 +690,100 @@ export default function MockInterviewRoomScreen({ route, navigation }: any) {
             >
               <Text style={styles.controlButtonText}>{camOn ? 'Stop video' : 'Start video'}</Text>
             </Pressable>
+            <Pressable onPress={copyLink} style={styles.controlButton}>
+              <Text style={styles.controlButtonText}>Invite</Text>
+            </Pressable>
             <Pressable onPress={leaveRoom} style={[styles.controlButton, styles.leaveButton]}>
               <Text style={[styles.controlButtonText, { color: '#fff' }]}>Leave</Text>
             </Pressable>
           </View>
-
-          <Text style={styles.note}>
-            Media flows directly between the two devices. If a direct path is blocked, a relay
-            server carries it instead.
-          </Text>
-        </>
-      )}
-    </ScrollView>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 16 },
-  title: { color: colors.textPrimary, fontSize: 18, fontWeight: '700' },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 6 },
-  statusBadge: { fontSize: 11, fontWeight: '700' },
-  muted: { color: colors.textSecondary, fontSize: 11 },
-  mono: { color: colors.textSecondary, fontSize: 11, fontFamily: 'monospace' },
-  chipButton: { backgroundColor: colors.surface, borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  chipButtonText: { color: colors.textPrimary, fontSize: 11, fontWeight: '600' },
-  infoBanner: { backgroundColor: 'rgba(99,102,241,0.08)', borderRadius: 12, padding: 14, marginBottom: 12 },
-  warnBanner: { backgroundColor: 'rgba(251,191,36,0.1)', borderRadius: 12, padding: 14, marginBottom: 12 },
-  errorBanner: { backgroundColor: 'rgba(248,113,113,0.1)', borderRadius: 12, padding: 14, marginBottom: 12 },
-  bannerTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '700', marginBottom: 4 },
-  body: { color: colors.textPrimary, fontSize: 12 },
-  errorText: { color: colors.danger, fontSize: 12 },
-  videoTile: { aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 16, overflow: 'hidden', marginBottom: 12, position: 'relative' },
-  video: { flex: 1 },
-  videoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  videoLabel: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  controlsRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 8 },
-  controlButton: { backgroundColor: colors.surface, borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 12 },
-  controlButtonOff: { backgroundColor: 'rgba(248,113,113,0.12)', borderColor: colors.danger },
-  controlButtonText: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
+  root: { flex: 1, backgroundColor: '#000' },
+  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
+  placeholderText: { color: colors.textSecondary, fontSize: 13, textAlign: 'center' },
+  thumb: {
+    position: 'absolute',
+    right: 14,
+    width: 104,
+    height: 150,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  thumbLabel: {
+    position: 'absolute',
+    bottom: 4,
+    left: 6,
+    color: '#fff',
+    fontSize: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 14, gap: 6 },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  statusText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  qualityText: { fontSize: 11, fontWeight: '700' },
+  peerName: {
+    color: '#fff',
+    fontSize: 11,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  controls: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, gap: 10 },
+  audioOnlyNote: { color: colors.warning, fontSize: 11, textAlign: 'center' },
+  controlRow: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 },
+  controlButton: {
+    backgroundColor: 'rgba(30,41,59,0.92)',
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  controlButtonOff: { backgroundColor: 'rgba(248,113,113,0.22)', borderColor: colors.danger },
+  controlButtonText: { color: colors.textPrimary, fontSize: 12, fontWeight: '700' },
   leaveButton: { backgroundColor: colors.danger, borderColor: colors.danger },
-  note: { color: colors.textSecondary, fontSize: 11, marginTop: 16, textAlign: 'center', lineHeight: 16 },
+  messageScreen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    gap: 12,
+  },
+  messageTitle: { color: colors.textPrimary, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  messageBody: { color: colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+  secondaryButton: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  secondaryButtonText: { color: colors.textPrimary, fontSize: 13, fontWeight: '600' },
 });
