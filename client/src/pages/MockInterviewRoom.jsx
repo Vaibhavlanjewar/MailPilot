@@ -152,6 +152,10 @@ export default function MockInterviewRoom() {
   const [elapsed, setElapsed] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [quality, setQuality] = useState(null);
+  // Android visitors get an upfront choice before anything touches their
+  // camera/mic — null means undecided (interstitial showing), 'web' means
+  // resolved either way (continuing here or the choice doesn't apply).
+  const [platformChoice, setPlatformChoice] = useState(() => (isAndroid() ? null : 'web'));
   const stageRef = useRef(null);
 
   const localVideoRef = useRef(null);
@@ -531,6 +535,7 @@ export default function MockInterviewRoom() {
   }, [code, createPeerConnection]);
 
   useEffect(() => {
+    if (platformChoice !== 'web') return undefined; // interstitial still showing — nothing to join yet
     const mySession = ++sessionIdRef.current;
     startCall(mySession);
     return () => {
@@ -538,7 +543,7 @@ export default function MockInterviewRoom() {
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
+  }, [code, platformChoice]);
 
   // Ticks only while a call is up. Derived from a timestamp rather than an
   // incrementing counter so a backgrounded tab (where timers are throttled)
@@ -661,6 +666,35 @@ export default function MockInterviewRoom() {
     toast.success('Link copied.');
   }
 
+  // Android visitors choose up front, before this page ever asks for
+  // camera/mic — opening the app hands off immediately; staying here just
+  // resolves the choice and falls through to the normal join flow below.
+  if (platformChoice === null) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center gap-4 p-6 pt-16 text-center">
+        <h1 className="text-lg font-bold text-app">Join this practice room</h1>
+        <p className="text-sm text-app-muted">
+          Have the JobPilot app installed? Join there for the best experience — or continue right here in
+          the browser.
+        </p>
+        <a
+          href={`jobpilot://mock-interview/${code}`}
+          className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Open in the JobPilot app
+        </a>
+        <button
+          type="button"
+          onClick={() => setPlatformChoice('web')}
+          className="w-full rounded-xl bg-app-muted px-4 py-3 text-sm font-semibold text-app hover:opacity-80"
+        >
+          Continue in this browser
+        </button>
+        <p className="text-xs text-app-muted">Don't have the app? Continuing in the browser works fine too.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -702,18 +736,6 @@ export default function MockInterviewRoom() {
           Copy invite link
         </button>
       </div>
-
-      {isAndroid() && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-app">
-          <span>Have the JobPilot app installed? Join there instead.</span>
-          <a
-            href={`jobpilot://mock-interview/${code}`}
-            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
-          >
-            Open in app
-          </a>
-        </div>
-      )}
 
       {status === 'scheduled' && pendingInfo && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-6 text-center text-sm text-app">
