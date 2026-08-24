@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import Toast from 'react-native-toast-message';
 import api from '../../services/api';
 import { Screen, Card, Field, PrimaryButton, SecondaryButton } from '../../components/ui';
@@ -28,6 +29,7 @@ export default function ContactsScreen() {
   const [addOpen, setAddOpen] = useState(false);
   const [addDraft, setAddDraft] = useState({ name: '', email: '', company: '' });
   const [addBusy, setAddBusy] = useState(false);
+  const [csvBusy, setCsvBusy] = useState(false);
 
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [editDraft, setEditDraft] = useState({ name: '', email: '', company: '' });
@@ -96,6 +98,31 @@ export default function ContactsScreen() {
     }
   }
 
+  async function handleUploadCsv() {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel'],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const file = result.assets[0];
+
+    setCsvBusy(true);
+    try {
+      const form = new FormData();
+      // RN's FormData accepts a { uri, name, type } object in place of a Blob.
+      form.append('file', { uri: file.uri, name: file.name || 'contacts.csv', type: 'text/csv' } as any);
+      const { data } = await api.post('/contacts/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      await load();
+      Toast.show({ type: 'success', text1: `Imported ${data.imported} contact${data.imported === 1 ? '' : 's'}.` });
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: err?.message || 'Could not import the CSV.' });
+    } finally {
+      setCsvBusy(false);
+    }
+  }
+
   function openEdit(row: Contact) {
     setEditContact(row);
     setEditDraft({ name: row.name || '', email: row.email, company: row.company || '' });
@@ -129,8 +156,19 @@ export default function ContactsScreen() {
     <Screen>
       <View style={styles.header}>
         <Field label="Search" placeholder="Search by name, email, or company" value={search} onChangeText={setSearch} />
-        <PrimaryButton title="+ Add contact" onPress={() => setAddOpen(true)} />
-        <Text style={styles.note}>CSV import is available on the web app for now.</Text>
+        <View style={styles.headerButtons}>
+          <View style={{ flex: 1 }}>
+            <PrimaryButton title="+ Add contact" onPress={() => setAddOpen(true)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <SecondaryButton
+              title={csvBusy ? 'Importing…' : 'Upload CSV'}
+              onPress={handleUploadCsv}
+              disabled={csvBusy}
+            />
+          </View>
+        </View>
+        <Text style={styles.note}>CSV needs name, email, company columns — email is required.</Text>
       </View>
 
       {loading && rows.length === 0 ? (
@@ -218,6 +256,7 @@ export default function ContactsScreen() {
 
 const styles = StyleSheet.create({
   header: { padding: 16, paddingBottom: 8, gap: 10 },
+  headerButtons: { flexDirection: 'row', gap: 10 },
   note: { color: colors.textSecondary, fontSize: 11 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   name: { color: colors.textPrimary, fontSize: 14, fontWeight: '700' },

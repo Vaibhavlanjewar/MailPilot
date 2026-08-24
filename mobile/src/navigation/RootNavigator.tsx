@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
@@ -33,6 +33,24 @@ function AuthNavigator() {
   );
 }
 
+// Only matches once AppDrawer is mounted (post-login) — an unauthenticated
+// tap just opens the app to the login screen instead of crashing, since
+// Login/Register/ForgotPassword have no matching path. Typed as `any` because
+// the nested-navigator shape here doesn't statically match a single flat
+// param list and isn't worth threading through every navigator's types.
+const linking: LinkingOptions<any> = {
+  prefixes: ['jobpilot://'],
+  config: {
+    screens: {
+      MockInterviewLobby: {
+        screens: {
+          MockInterviewRoom: 'mock-interview/:code',
+        },
+      },
+    },
+  },
+};
+
 export default function RootNavigator() {
   const { ready, isAuthenticated } = useAuth();
 
@@ -45,24 +63,7 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer
-      theme={navTheme}
-      linking={{
-        prefixes: ['jobpilot://'],
-        // Only matches once AppDrawer is mounted (post-login) — an
-        // unauthenticated tap just opens the app to the login screen instead
-        // of crashing, since Login/Register/ForgotPassword have no matching path.
-        config: {
-          screens: {
-            MockInterviewLobby: {
-              screens: {
-                MockInterviewRoom: 'mock-interview/:code',
-              },
-            },
-          },
-        },
-      }}
-    >
+    <NavigationContainer theme={navTheme} linking={linking}>
       {isAuthenticated ? <AppDrawer /> : <AuthNavigator />}
     </NavigationContainer>
   );

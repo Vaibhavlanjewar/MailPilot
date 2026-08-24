@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import api from '../../services/api';
 import { Screen, Card, Field, PrimaryButton, SecondaryButton } from '../../components/ui';
 import { colors } from '../../theme/colors';
@@ -33,6 +33,8 @@ export default function CampaignCreateScreen() {
   const [hasResume, setHasResume] = useState(false);
   const [attachResume, setAttachResume] = useState(true);
 
+  const [sender, setSender] = useState<{ address: string; displayName: string; hasGmail: boolean } | null>(null);
+
   const [limits, setLimits] = useState({
     maxRecipientsPerCampaign: MAX_RECIPIENTS_PER_CAMPAIGN,
     dailyLimit: DAILY_RECIPIENT_LIMIT,
@@ -50,12 +52,13 @@ export default function CampaignCreateScreen() {
   const load = useCallback(async () => {
     setContactsLoading(true);
     try {
-      const [{ data: contactsData }, { data: templatesData }, { data: resumeData }, { data: limitsData }] =
+      const [{ data: contactsData }, { data: templatesData }, { data: resumeData }, { data: limitsData }, { data: settingsData }] =
         await Promise.all([
           api.get('/contacts'),
           api.get('/templates'),
           api.get('/resumes/me').catch(() => ({ data: {} })),
           api.get('/campaign/limits').catch(() => ({ data: {} })),
+          api.get('/users/me/settings').catch(() => ({ data: {} })),
         ]);
       setContacts(contactsData.contacts || []);
       setTemplates(templatesData.templates || []);
@@ -67,6 +70,17 @@ export default function CampaignCreateScreen() {
           remainingToday: limitsData.remainingToday,
         });
       }
+      if (settingsData?.email) {
+        const address = (settingsData.smtpUser || '').trim() || (settingsData.email || '').trim();
+        setSender({
+          address,
+          displayName:
+            (settingsData.smtpFromDisplayName || '').trim() ||
+            (settingsData.name || '').trim() ||
+            address.split('@')[0],
+          hasGmail: Boolean(settingsData.hasGmailRefreshToken),
+        });
+      }
     } catch (err: any) {
       Toast.show({ type: 'error', text1: err?.message || 'Could not load campaign setup.' });
     } finally {
@@ -74,9 +88,14 @@ export default function CampaignCreateScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Refreshes contacts/resume/Gmail status when returning from Recipients,
+  // My Resume, or Settings — mirrors the web wizard resuming with fresh data
+  // after those same round trips.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const activeContacts = useMemo(() => contacts.filter((c) => c.subscribed !== false), [contacts]);
   const filteredContacts = useMemo(() => {
@@ -148,8 +167,25 @@ export default function CampaignCreateScreen() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        {sender && !sender.hasGmail && (
+          <Card style={{ marginBottom: 14, borderColor: colors.warning }}>
+            <Text style={styles.sectionTitle}>Gmail isn't connected</Text>
+            <Text style={styles.muted}>
+              This campaign can't be delivered until Gmail is connected as the sender.
+            </Text>
+            <View style={{ marginTop: 10 }}>
+              <SecondaryButton title="Connect Gmail in Settings" onPress={() => navigation.navigate('Settings')} />
+            </View>
+          </Card>
+        )}
+
         <Card style={{ marginBottom: 14 }}>
-          <Text style={styles.sectionTitle}>Recipients</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Recipients</Text>
+            <Pressable onPress={() => navigation.navigate('Contacts')}>
+              <Text style={styles.link}>Manage contacts / Upload CSV</Text>
+            </Pressable>
+          </View>
           <Text style={styles.muted}>
             {recipientCount} selected · {limits.remainingToday} sends left today
           </Text>
@@ -169,7 +205,12 @@ export default function CampaignCreateScreen() {
           {contactsLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
           ) : filteredContacts.length === 0 ? (
-            <Text style={styles.muted}>No contacts found. Add some under Recipients first.</Text>
+            <View>
+              <Text style={styles.muted}>No contacts yet.</Text>
+              <View style={{ marginTop: 10 }}>
+                <SecondaryButton title="Add contacts" onPress={() => navigation.navigate('Contacts')} />
+              </View>
+            </View>
           ) : (
             <View style={styles.contactList}>
               {filteredContacts.map((contact) => {
@@ -282,7 +323,12 @@ export default function CampaignCreateScreen() {
               <Switch value={attachResume} onValueChange={setAttachResume} trackColor={{ true: colors.primary }} />
             </View>
           ) : (
-            <Text style={styles.hint}>No resume on file, so nothing will be attached.</Text>
+            <View style={{ marginTop: 14 }}>
+              <Text style={styles.hint}>No resume on file, so nothing will be attached.</Text>
+              <Pressable onPress={() => navigation.navigate('MyResume')} style={{ marginTop: 6 }}>
+                <Text style={styles.link}>Add one under My Resume</Text>
+              </Pressable>
+            </View>
           )}
         </Card>
 
@@ -301,6 +347,8 @@ export default function CampaignCreateScreen() {
 
 const styles = StyleSheet.create({
   sectionTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 10 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  link: { color: colors.primary, fontSize: 12, fontWeight: '600' },
   muted: { color: colors.textSecondary, fontSize: 12, marginBottom: 10 },
   hint: { color: colors.textSecondary, fontSize: 11, marginTop: 8, lineHeight: 16 },
   errorText: { color: colors.danger, fontSize: 12, fontWeight: '600', marginBottom: 10 },
