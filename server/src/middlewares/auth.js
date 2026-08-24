@@ -24,19 +24,54 @@ export async function authenticate(req, res, next) {
   }
 
   try {
-    const user = await User.findOneAndUpdate(
-      { email },
-      {
-        $set: { firebaseUid: decoded.uid, isVerified: Boolean(decoded.email_verified) },
-        $setOnInsert: { email, name: decoded.name || '' },
-      },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
-    );
-
+    const user = await findOrCreateUser(email, decoded);
     req.userId = user._id.toString();
     req.user = user;
     next();
   } catch (err) {
     next(err);
   }
+}
+
+/**
+ * firebaseUid carries a unique index (see models/User.js), so a blind
+ * findOneAndUpdate-by-email upsert can throw an unhandled duplicate-key error
+ * whenever that uid already sits on a *different* email's document — e.g. the
+ * same Firebase account's email changed, or a stale record from an earlier
+ * sign-in attempt. That crash previously surfaced as a raw 500 on the very
+ * first authenticated request after login. Resolving by firebaseUid first
+ * keeps that as a normal update instead.
+ */
+async function findOrCreateUser(email, decoded) {
+  const update = {
+    $set: { firebaseUid: decoded.uid, isVerified: Boolean(decoded.email_verified) },
+  };
+
+  try {
+    return await User.findOneAndUpdate(
+      { email },
+      { ...update, $setOnInsert: { email, name: decoded.name || '' } },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+  } catch (err) {
+    if (err.code !== 11000) throw err;
+  }
+
+  // The email-based upsert lost a unique-index race on firebaseUid — that uid
+  // already belongs to a different document. Treat it as the same account and
+  // move its email forward instead of leaving it permanently unreachable by
+  // the identity Firebase now reports for it.
+  const existing = await User.findOneAndUpdate(
+    { firebaseUid: decoded.uid },
+    { $set: { ...update.$set, email } },
+    { new: true },
+  );
+  if (existing) return existing;
+
+  // Lost the race the other way (another request just created the email doc
+  // first) — it now has the uid we wanted, so just re-fetch it.
+  const byEmail = await User.findOne({ email });
+  if (byEmail) return byEmail;
+
+  throw new AppError('Could not resolve account for this login.', 500);
 }
