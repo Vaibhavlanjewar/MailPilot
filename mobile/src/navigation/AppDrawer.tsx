@@ -24,6 +24,7 @@ import PostJobScreen from '../screens/main/PostJobScreen';
 import MyPostingsScreen from '../screens/main/MyPostingsScreen';
 import HowToUseScreen from '../screens/main/HowToUseScreen';
 import ContactUsScreen from '../screens/main/ContactUsScreen';
+import FeedbackScreen from '../screens/main/FeedbackScreen';
 import MindGamesScreen from '../screens/main/MindGamesScreen';
 import PlaceholderScreen from '../screens/main/PlaceholderScreen';
 
@@ -75,6 +76,7 @@ const NAV_SECTIONS: NavSection[] = [
       { name: 'Settings', label: 'Settings', icon: 'settings-outline' },
       { name: 'HowToUse', label: 'How To Use', icon: 'help-circle-outline' },
       { name: 'ContactUs', label: 'Contact Us', icon: 'mail-outline' },
+      { name: 'Feedback', label: 'Send Feedback', icon: 'chatbox-ellipses-outline' },
     ],
   },
 ];
@@ -160,6 +162,7 @@ export default function AppDrawer() {
       <Drawer.Screen name="Settings" component={SettingsScreen} />
       <Drawer.Screen name="HowToUse" component={HowToUseScreen} options={{ title: 'How To Use' }} />
       <Drawer.Screen name="ContactUs" component={ContactUsScreen} options={{ title: 'Contact Us' }} />
+      <Drawer.Screen name="Feedback" component={FeedbackScreen} options={{ title: 'Send Feedback' }} />
     </Drawer.Navigator>
   );
 }

@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { colors } from '../theme/colors';
 import CampaignsScreen from '../screens/main/CampaignsScreen';
 import CampaignDetailScreen from '../screens/main/CampaignDetailScreen';
+import CampaignCreateScreen from '../screens/main/CampaignCreateScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -15,6 +16,7 @@ export default function CampaignsStack() {
       }}
     >
       <Stack.Screen name="CampaignsList" component={CampaignsScreen} options={{ title: 'Campaigns' }} />
+      <Stack.Screen name="CampaignCreate" component={CampaignCreateScreen} options={{ title: 'New Campaign' }} />
       <Stack.Screen
         name="CampaignDetail"
         component={CampaignDetailScreen}

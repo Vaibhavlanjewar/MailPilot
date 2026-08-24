@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View }
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
 import api from '../../services/api';
-import { Screen } from '../../components/ui';
+import { Screen, PrimaryButton } from '../../components/ui';
 import { colors } from '../../theme/colors';
 
 function campaignUiStatus(c: { status: string; scheduledAt?: string | null }) {
@@ -76,6 +76,7 @@ export default function CampaignsScreen() {
     <Screen>
       <View style={styles.header}>
         <Text style={styles.subtitle}>Campaigns from the API, with live status.</Text>
+        <PrimaryButton title="+ Create campaign" onPress={() => navigation.navigate('CampaignCreate')} />
       </View>
       {loading && campaigns.length === 0 ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
@@ -120,7 +121,7 @@ export default function CampaignsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 16, paddingTop: 16 },
+  header: { paddingHorizontal: 16, paddingTop: 16, gap: 10 },
   subtitle: { color: colors.textSecondary, fontSize: 13 },
   card: {
     flexDirection: 'row',
