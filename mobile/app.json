@@ -2,7 +2,7 @@
   "expo": {
     "name": "JobPilot",
     "slug": "jobpilot",
-    "scheme": "jobpilot",
+    "scheme": ["jobpilot", "com.googleusercontent.apps.423779472567-f1i6p7ingn1m0m68f8v8l3c3ansj9540"],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

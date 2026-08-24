@@ -31,6 +31,21 @@ export const googleSignInConfigError = REQUIRED_CLIENT_ID
   : `Google sign-in is not configured for ${Platform.OS}. Set EXPO_PUBLIC_GOOGLE_${Platform.OS === 'android' ? 'ANDROID' : Platform.OS === 'ios' ? 'IOS' : 'WEB'}_CLIENT_ID in mobile/.env (and on EAS) and rebuild.`;
 
 /**
+ * On Android, expo-auth-session defaults the OAuth redirect to
+ * `<applicationId>:/oauthredirect` (the app's own package name as the
+ * custom scheme). Google's Android-type OAuth clients don't recognize
+ * that — they expect the reversed-client-id scheme Google itself assigns
+ * (`com.googleusercontent.apps.<client-id-prefix>`). Sending the wrong
+ * one doesn't produce a redirect_uri_mismatch — Google rejects the whole
+ * authorization request outright ("Access blocked ... invalid_request"),
+ * since it can't recognize this client-id/redirect-uri pair at all. Must
+ * match the scheme registered in app.json's `expo.scheme` array.
+ */
+const ANDROID_REVERSED_SCHEME = ANDROID_CLIENT_ID
+  ? `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace(/\.apps\.googleusercontent\.com$/, '')}`
+  : null;
+
+/**
  * Wraps expo-auth-session's Google provider so screens only deal with a
  * single onIdToken callback instead of the request/response/prompt trio.
  */
@@ -39,11 +54,16 @@ export function useGoogleAuth(onIdToken: (idToken: string) => void, onError: (me
   // the hook from throwing at render time regardless of which are actually
   // configured; `googleSignInConfigError` is what gates whether promptAsync()
   // is allowed to actually run.
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    webClientId: WEB_CLIENT_ID || PLACEHOLDER,
-    androidClientId: ANDROID_CLIENT_ID || PLACEHOLDER,
-    iosClientId: IOS_CLIENT_ID || PLACEHOLDER,
-  });
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(
+    {
+      webClientId: WEB_CLIENT_ID || PLACEHOLDER,
+      androidClientId: ANDROID_CLIENT_ID || PLACEHOLDER,
+      iosClientId: IOS_CLIENT_ID || PLACEHOLDER,
+    },
+    Platform.OS === 'android' && ANDROID_REVERSED_SCHEME
+      ? { native: `${ANDROID_REVERSED_SCHEME}:/oauthredirect` }
+      : {}
+  );
 
   useEffect(() => {
     if (response?.type === 'success' && response.params?.id_token) {

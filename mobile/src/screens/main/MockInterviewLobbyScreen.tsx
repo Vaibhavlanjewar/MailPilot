@@ -25,6 +25,21 @@ function defaultStart() {
   return d;
 }
 
+/**
+ * A meeting link shared by someone else always points at the web app
+ * (mailpilot.../app/mock-interview/:code) — the invitee's browser has no way
+ * to know the app exists. This lets them paste that link (or just the bare
+ * code) here instead, so the app can join directly without OS-level deep
+ * link handling.
+ */
+function extractRoomCode(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  const withoutQuery = trimmed.split(/[?#]/)[0];
+  const segments = withoutQuery.split('/').filter(Boolean);
+  return segments[segments.length - 1] || '';
+}
+
 type Meeting = {
   code: string;
   title?: string;
@@ -48,6 +63,7 @@ export default function MockInterviewLobbyScreen() {
 
   const [title, setTitle] = useState('');
   const [scheduledAt, setScheduledAt] = useState<Date>(defaultStart());
+  const [joinLink, setJoinLink] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [inviteeEmail, setInviteeEmail] = useState('');
 
@@ -67,6 +83,16 @@ export default function MockInterviewLobbyScreen() {
     const timer = setInterval(loadMeetings, 60_000);
     return () => clearInterval(timer);
   }, [loadMeetings]);
+
+  function joinViaLink() {
+    const code = extractRoomCode(joinLink);
+    if (!code) {
+      Toast.show({ type: 'error', text1: 'Paste a valid invite link or room code.' });
+      return;
+    }
+    setJoinLink('');
+    navigation.navigate('MockInterviewRoom', { code });
+  }
 
   async function createRoom() {
     setCreating(true);
@@ -158,6 +184,22 @@ export default function MockInterviewLobbyScreen() {
           <PrimaryButton title={creating ? 'Creating…' : 'Start now'} onPress={createRoom} loading={creating} />
           <SecondaryButton title="Schedule for later" onPress={() => setShowForm((v) => !v)} />
         </View>
+
+        <Card style={{ marginTop: 16 }}>
+          <Text style={styles.cardTitle}>Have an invite link?</Text>
+          <Text style={styles.muted}>
+            Someone shared a JobPilot meeting link with you — paste it here to join right in the app.
+          </Text>
+          <Field
+            label="Invite link or room code"
+            placeholder="https://... or just the code"
+            value={joinLink}
+            onChangeText={setJoinLink}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <PrimaryButton title="Join" onPress={joinViaLink} disabled={!joinLink.trim()} />
+        </Card>
 
         {showForm && (
           <Card style={{ marginTop: 16 }}>
